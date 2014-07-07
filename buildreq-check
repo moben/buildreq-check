@@ -61,16 +61,12 @@ def list_powerset(lst):
     return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
 
 
-def extract_srpm(srpm):
-    workdir = tempfile.mkdtemp()
-
+def extract_srpm(workdir, srpm):
     rc = subprocess.Popen(['rpm2cpio', srpm],stdout=subprocess.PIPE)
     cs = subprocess.Popen(['cpio', '--quiet', '--extract'], cwd=workdir,
             stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'))
 
     cs.communicate()
-
-    return workdir
 
 
 #def get_buildrequires(filename):
@@ -473,17 +469,19 @@ def find_unneeded_buildreqs(workdir, spec):
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
-    parser.add_argument('--loglvl', '-l', help='set log verbosity',
+    parser.add_argument('--loglvl', '-l',
+                        help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
                         default='info', metavar='lvl')
     args = parser.parse_args()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.loglvl.upper()))
-
     srpm = args.srpm
-    workdir = extract_srpm(srpm)
+
+    workdir = tempfile.mkdtemp(prefix='buildreq_drop')
 
     try:
+        extract_srpm(workdir, srpm)
         specs = glob.glob(workdir + '/*.spec')
         # from mock/py/mockbuild/backend.py:
         # if there's more than one then someone is an idiot
@@ -504,7 +502,7 @@ def main():
 
     finally:
         shutil.rmtree(workdir)
-        logger.info('work directory (please clean up): %s', workdir)
+
 
 if __name__ == "__main__":
     try:
