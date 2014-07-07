@@ -418,12 +418,9 @@ def find_unneeded_buildreqs(workdir, spec):
     possibly_unneeded = list_powerset(buildreqs)
     breaking = set()
     logger.debug('combinations of possibly unneeded Requires: %s',
-        sep_print(map(lambda x: sep_print(x, ', '), possibly_unneeded), '\n   '))
+            sep_print(map(lambda x: sep_print(x, ', '), possibly_unneeded), '\n   '))
 
-    for combination in possibly_unneeded:
-        if not combination:
-            continue
-
+    for combination in filter(None, possibly_unneeded):
         if any(b < combination for b in breaking):
             # assume that leaving out more deps won't fix an already failing build.
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
@@ -444,19 +441,21 @@ def find_unneeded_buildreqs(workdir, spec):
 
         try:
             srpm = build_srpm(workdir, testspec, resultdir)
-            logger.info('srpm build without %s passed', sep_print(combination, ', '))
         except MockError:
-            logger.info('srpm build without %s failed', sep_print(combination, ', '))
             breaking.add(combination)
             continue
-        
+        finally:
+            logger.info('srpm build without %s %s',
+                    sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
+
         try:
             build_rpm(srpm, resultdir)
-            logger.info('rpm build without %s passed', sep_print(combination, ', '))
         except MockError:
-            logger.info('rpm build without %s failed', sep_print(combination, ', '))
             breaking.add(combination)
             continue
+        finally:
+            logger.info('rpm build without %s %s',
+                    sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         if not rpm_cmp_dir(workdir, resultdir):
             breaking.add(combination)
