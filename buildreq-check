@@ -417,7 +417,7 @@ def find_unneeded_buildreqs(workdir, spec):
         write_spec(spec, testspec, buildreqs - combination)
 
         logger.info('trying build without: %s', sep_print(combination, ', '))
-        logger.info('result directory: %s', resultdir)
+        logger.debug('result directory: %s', resultdir)
 
         try:
             srpm = build_srpm(workdir, testspec, resultdir)
@@ -425,7 +425,7 @@ def find_unneeded_buildreqs(workdir, spec):
             breaking.add(combination)
             continue
         finally:
-            logger.info('srpm build without %s %s',
+            logger.info('build without %s: srpm %s',
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         try:
@@ -434,10 +434,11 @@ def find_unneeded_buildreqs(workdir, spec):
             breaking.add(combination)
             continue
         finally:
-            logger.info('rpm build without %s %s',
+            logger.info('build without %s: rpm %s',
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         if not rpm_cmp_dir(workdir, resultdir):
+            logger.info('build without %s: rpms differ', sep_print(combination, ', '))
             breaking.add(combination)
 
     unneeded = frozenset(frozenset(possibly_unneeded) - breaking)
@@ -468,9 +469,11 @@ def main():
 
         # clean mock root cache
         # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
+        logger.debug('cleaning mock root cache')
         run_mock(['--clean', '--scrub=root-cache'])
 
         # here we update our yum cache. It will stay the same for the remainder of the run
+        logger.info('building reference rpm')
         build_rpm(srpm, workdir, yum_update=True)
 
         unneeded = find_unneeded_buildreqs(workdir, spec)
