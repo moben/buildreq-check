@@ -1,4 +1,7 @@
 from __future__ import print_function
+from __future__ import unicode_literals
+from future_builtins import map, filter
+from functools import reduce
 
 import argparse
 import glob
@@ -343,7 +346,9 @@ def run_mock(args, yum_update=False):
 
     try:
         logger.debug('running: %s', sep_print(mock_args, ' '))
-        p = subprocess.Popen(mock_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # universal newlines to get unicode strings instead of byte strings for python3 compatibility
+        p = subprocess.Popen(mock_args, universal_newlines=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
         for line in p.stdout:
             if line[-1] == '\n':
