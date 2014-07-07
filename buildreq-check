@@ -13,31 +13,6 @@ import subprocess
 import sys
 import tempfile
 
-#import collections
-#def Tree():
-#    return collections.defaultdict(Tree)
-#
-#def tree_paths(tree, cur=()):
-#    if not tree.keys():
-#        yield cur
-#    else:
-#        for n, s in tree.items():
-#            for path in tree_paths(s, cur+(n,)):
-#                yield path
-#
-#def tree_add(tree, items):
-#    for key in items:
-#        tree = tree[key]
-#
-#def tree_print(t, depth = 0):
-#    """ print a tree """
-#    for k in t.keys():
-#        print("%s %2d %s" % ("".join(depth * ["    "]), depth, k))
-#        depth += 1
-#        tree_print(t[k], depth)
-#        depth -= 1
-#
-
 #NOTE not sure if it is good practice to do this at global scope?
 logger = logging.getLogger('buildreq_drop')
 
@@ -510,26 +485,5 @@ if __name__ == "__main__":
         logger.error(str(e))
         sys.exit(1)
 
-
-#print spkg.prep
-#print spkg.build
-#print spkg.check
-#print spkg.clean
-#print spkg.install
-
-# only build srpm, use mock for testing
-#buildAmount= rpm.RPMBUILD_PACKAGESOURCE
-#    rpm.RPMBUILD_PREP          | \
-#    rpm.RPMBUILD_BUILD         | \
-#    rpm.RPMBUILD_INSTALL       | \
-#    rpm.RPMBUILD_CHECK         | \
-#    rpm.RPMBUILD_CLEAN         | \
-#    rpm.RPMBUILD_FILECHECK     | \
-#    rpm.RPMBUILD_PACKAGESOURCE | \
-#    rpm.RPMBUILD_PACKAGEBINARY | \
-#    rpm.RPMBUILD_RMSOURCE      | \
-#    rpm.RPMBUILD_RMBUILD
-
-#spkg._doBuild(buildAmount)
 
 # vim: sta:et:ai:si:ts=4:sw=4:sts=4
