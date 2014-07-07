@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import argparse
 import glob
 import hashlib
 import logging
@@ -36,6 +37,10 @@ import tempfile
 #		tree_print(t[k], depth)
 #		depth -= 1
 #
+
+#NOTE not sure if it is good practice to do this at global scope?
+logger = logging.getLogger('buildreq_drop')
+
 
 class MockError(Exception):
 	pass
@@ -466,9 +471,16 @@ def find_unneeded_buildreqs(workdir, spec):
 
 
 def main():
-	logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+	parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+	parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
+	parser.add_argument('--loglvl', '-l', help='set log verbosity',
+	                    choices=('debug', 'info', 'warning', 'error', 'critical'),
+	                    default='info', metavar='lvl')
+	args = parser.parse_args()
 
-	srpm = sys.argv[1]
+	logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.loglvl.upper()))
+
+	srpm = args.srpm
 	workdir = extract_srpm(srpm)
 
 	try:
@@ -495,7 +507,6 @@ def main():
 		logger.info('work directory (please clean up): %s', workdir)
 
 if __name__ == "__main__":
-	logger = logging.getLogger('buildreq_drop')
 	try:
 		main()
 	except Exception as e:
