@@ -449,6 +449,8 @@ def find_unneeded_buildreqs(workdir, spec):
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
+    parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
+                        dest='clean', action='store_false', default=True)
     parser.add_argument('--loglvl', '-l',
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
@@ -483,7 +485,10 @@ def main():
             print('    ', sep_print(s, ', '))
 
     finally:
-        shutil.rmtree(workdir)
+        if args.clean:
+            shutil.rmtree(workdir)
+        else:
+            print('Temporary files are in', workdir)
 
 
 if __name__ == "__main__":
