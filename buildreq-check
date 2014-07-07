@@ -423,11 +423,7 @@ def find_unneeded_buildreqs(workdir, spec):
 		if not combination:
 			continue
 
-		skip=False
-		for b in breaking:
-			if b < combination:
-				skip=True
-		if skip:
+		if any(b < combination for b in breaking):
 			# assume that leaving out more deps won't fix an already failing build.
 			# might not be true in general, but is a pretty safe bet for unneeded deps, I think
 			# TODO? make this configurable?
@@ -461,12 +457,10 @@ def find_unneeded_buildreqs(workdir, spec):
 			breaking.add(combination)
 			continue
 
-
 		if not rpm_cmp_dir(workdir, resultdir):
 			breaking.add(combination)
 
-
-	unneeded = set(set(possibly_unneeded) - breaking)
+	unneeded = frozenset(frozenset(possibly_unneeded) - breaking)
 	# get biggest supersets
 	return frozenset(f for f in unneeded if not any(f < g for g in unneeded))
 
