@@ -40,8 +40,15 @@ import tempfile
 class MockError(Exception):
 	pass
 
+
 def sep_print(lst, sep):
 	return sep.join(map(str,lst))
+
+
+def get_buildid(pkgset):
+		m = hashlib.sha1()
+		m.update(repr(pkgset))
+		return m.hexdigest()[:7]
 
 
 # order is important here. Smallest to biggest. thus, don't use a set.
@@ -59,6 +66,7 @@ def extract_srpm(srpm):
 	cs.communicate()
 
 	return workdir
+
 
 #def get_buildrequires(filename):
 #	ts = rpm.transactionset()
@@ -310,10 +318,8 @@ def rpm_cmp(rpm1_filename, rpm2_filename):
 	
 
 	skipped_tags = frozenset((
-		#TODO make those deterministic
-		# look into faketime
-		#'RPMTAG_FILEDIGESTS',
-		#'RPMTAG_FILEMTIMES',
+		'RPMTAG_FILEDIGESTS',
+		'RPMTAG_FILEMTIMES',
 		'RPMTAG_NOT_FOUND',
 		'RPMTAG_BUILDTIME',
 		'RPMTAG_HDRID',
@@ -335,6 +341,20 @@ def rpm_cmp(rpm1_filename, rpm2_filename):
 			ret = False
 
 	return ret
+
+
+def rpm_cmp_dir(olddir, newdir):
+	rpms = glob.glob(olddir + '/*.rpm')
+	for rpm in rpms:
+		if rpm.endswith('.src.rpm'):
+			continue
+
+		newrpm = os.path.join(newdir, os.path.basename(rpm))
+		if not rpm_cmp(rpm, newrpm):
+			logger.info('rpms %s and %s differ', rpm, newrpm)
+			return False
+
+	return True
 
 
 def run_mock(args, yum_update=False):
@@ -362,7 +382,7 @@ def run_mock(args, yum_update=False):
 	except subprocess.CalledProcessError:
 		pass
 
-	raise MockError
+	raise MockError(mock_args)
 
 
 def build_srpm(sourcedir, spec, resultdir, yum_update=False, clean=True):
@@ -374,13 +394,10 @@ def build_srpm(sourcedir, spec, resultdir, yum_update=False, clean=True):
 	if not clean:
 		args+=['--no-clean']
 
-	try:
-		if run_mock(args, yum_update):
-			# there should only be one
-			srpm = glob.glob(resultdir + '/*.src.rpm')
-			return srpm[0]
-	except MockError:
-		raise
+	if run_mock(args, yum_update):
+		# there should only be one
+		srpm = glob.glob(resultdir + '/*.src.rpm')
+		return srpm[0]
 
 
 def build_rpm(srpm, resultdir, yum_update=False, clean=True):
@@ -390,43 +407,17 @@ def build_rpm(srpm, resultdir, yum_update=False, clean=True):
 	if not clean:
 		args+=['--no-clean']
 
-	try:
-		run_mock(args, yum_update)
-	except MockError:
-		raise
+	run_mock(args, yum_update)
 
 
-def main():
-	logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-
-	srpm = sys.argv[1]
-
-	workdir = extract_srpm(srpm)
-
-	specs = glob.glob(workdir + '/*.spec')
-	# from mock/py/mockbuild/backend.py:
-	# if there's more than one then someone is an idiot
-	spec = specs[0]
+def find_unneeded_buildreqs(workdir, spec):
 	buildreqs = get_buildrequires(spec)
 	#TODO remove this
 	buildreqs.add('bash')
-
 	possibly_unneeded = list_powerset(buildreqs)
 	breaking = set()
-	logger.info('combinations of possibly unneeded Requires: %s',
+	logger.debug('combinations of possibly unneeded Requires: %s',
 		sep_print(map(lambda x: sep_print(x, ', '), possibly_unneeded), '\n   '))
-
-	# rebuild mock root cache to speed the following builds up
-	try:
-		run_mock(['--clean', '--scrub=root-cache'])
-	except MockError:
-		logger.error('clearing mock root cache failed')
-
-	try:
-		build_rpm(srpm, workdir, yum_update=True)
-	except MockError:
-		logger.error('building rpm with all BuildRequires failed')
-	
 
 	for combination in possibly_unneeded:
 		if not combination:
@@ -439,51 +430,67 @@ def main():
 		if skip:
 			# assume that leaving out more deps won't fix an already failing build.
 			# might not be true in general, but is a pretty safe bet for unneeded deps, I think
+			# TODO? make this configurable?
 			breaking.add(combination)
 			continue
-				
-		newreqs = frozenset(buildreqs) - combination
 
-		m = hashlib.sha1()
-		m.update(repr(combination))
-		build_id = m.hexdigest()[:7]
+		build_id = get_buildid(combination)
 		build_name = os.path.basename(spec)[:-5] + '-buildreq_drop-' + build_id
 
 		testspec = os.path.join(workdir, build_name + '.spec')
 		resultdir = os.path.join(workdir, build_name + '-results')
 
-		write_spec(spec, testspec, newreqs)
+		write_spec(spec, testspec, buildreqs - combination)
 
 		logger.info('trying build without: %s', sep_print(combination, ', '))
-#		logger.info('resulting BuildRequires: %s', sep_print(newreqs, ', '))
 		logger.info('result directory: %s', resultdir)
 
 		try:
 			srpm = build_srpm(workdir, testspec, resultdir)
 			logger.info('srpm build without %s passed', sep_print(combination, ', '))
-
+		except MockError:
+			logger.info('srpm build without %s failed', sep_print(combination, ', '))
+			breaking.add(combination)
+			continue
+		
+		try:
 			build_rpm(srpm, resultdir)
 			logger.info('rpm build without %s passed', sep_print(combination, ', '))
 		except MockError:
-			logger.info('build without %s failed', sep_print(combination, ', '))
+			logger.info('rpm build without %s failed', sep_print(combination, ', '))
 			breaking.add(combination)
 			continue
 
-		rpms = glob.glob(workdir + '/*.rpm')
-		for rpm in rpms:
-			if rpm.endswith('.src.rpm'):
-				continue
 
-			newrpm = os.path.join(resultdir, os.path.basename(rpm))
-			if not rpm_cmp(rpm, newrpm):
-				breaking.add(combination)
-				logger.info('rpms %s and %s differ', rpm, newrpm)
-				break
+		if not rpm_cmp_dir(workdir, resultdir):
+			breaking.add(combination)
 
 
 	unneeded = set(set(possibly_unneeded) - breaking)
 	# get biggest supersets
-	unneeded = frozenset(f for f in unneeded if not any(f < g for g in unneeded))
+	return frozenset(f for f in unneeded if not any(f < g for g in unneeded))
+
+
+def main():
+	logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+
+	srpm = sys.argv[1]
+	workdir = extract_srpm(srpm)
+
+	specs = glob.glob(workdir + '/*.spec')
+	# from mock/py/mockbuild/backend.py:
+	# if there's more than one then someone is an idiot
+	spec = specs[0]
+
+	# clean mock root cache
+	# the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
+	run_mock(['--clean', '--scrub=root-cache'])
+
+	# here we update our yum cache. It will stay the same for the remainder of the run
+	build_rpm(srpm, workdir, yum_update=True)
+
+	unneeded = find_unneeded_buildreqs(workdir, spec)
+
 	print('possibly unneeded BuildRequires:')
 	for s in unneeded:
 		print('    ', sep_print(s, ', '))
@@ -493,7 +500,11 @@ def main():
 
 if __name__ == "__main__":
 	logger = logging.getLogger('buildreq_drop')
-	main()
+	try:
+		main()
+	except Exception as e:
+		logger.error(str(e))
+		sys.exit(1)
 
 
 #print spkg.prep
