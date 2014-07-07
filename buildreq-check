@@ -517,3 +517,4 @@ if __name__ == "__main__":
 
 #spkg._doBuild(buildAmount)
 
+# vim: noai:ts=4:sw=4:sts=4:sta
