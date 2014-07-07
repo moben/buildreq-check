@@ -477,26 +477,28 @@ def main():
 	srpm = sys.argv[1]
 	workdir = extract_srpm(srpm)
 
-	specs = glob.glob(workdir + '/*.spec')
-	# from mock/py/mockbuild/backend.py:
-	# if there's more than one then someone is an idiot
-	spec = specs[0]
+	try:
+		specs = glob.glob(workdir + '/*.spec')
+		# from mock/py/mockbuild/backend.py:
+		# if there's more than one then someone is an idiot
+		spec = specs[0]
 
-	# clean mock root cache
-	# the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
-	run_mock(['--clean', '--scrub=root-cache'])
+		# clean mock root cache
+		# the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
+		run_mock(['--clean', '--scrub=root-cache'])
 
-	# here we update our yum cache. It will stay the same for the remainder of the run
-	build_rpm(srpm, workdir, yum_update=True)
+		# here we update our yum cache. It will stay the same for the remainder of the run
+		build_rpm(srpm, workdir, yum_update=True)
 
-	unneeded = find_unneeded_buildreqs(workdir, spec)
+		unneeded = find_unneeded_buildreqs(workdir, spec)
 
-	print('possibly unneeded BuildRequires:')
-	for s in unneeded:
-		print('    ', sep_print(s, ', '))
+		print('possibly unneeded BuildRequires:')
+		for s in unneeded:
+			print('    ', sep_print(s, ', '))
 
-#	shutil.rmtree(workdir)
-	logger.info('work directory (please clean up): %s', workdir)
+	finally:
+		shutil.rmtree(workdir)
+		logger.info('work directory (please clean up): %s', workdir)
 
 if __name__ == "__main__":
 	logger = logging.getLogger('buildreq_drop')
