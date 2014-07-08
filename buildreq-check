@@ -372,10 +372,7 @@ def run_mock(args, yum_update=False):
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
         for line in p.stdout:
-            if line[-1] == '\n':
-                logger.debug('mock: ' + line[:-1])
-            else:
-                logger.debug('mock: ' + line)
+            logger.debug('mock: ' + line.rstrip('\n'))
 
         p.wait()
 
