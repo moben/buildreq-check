@@ -64,15 +64,15 @@ def list_powerset(lst):
     return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
 
 
-def extract_srpm(workdir, srpm):
-    rc = subprocess.Popen(['rpm2cpio', srpm],stdout=subprocess.PIPE)
-    cs = subprocess.Popen(['cpio', '--quiet', '--extract'], cwd=workdir,
+def extract_rpm(workdir, rpm):
+    rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
+    cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames'], cwd=workdir,
             stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'))
 
     cs.communicate()
 
     if rc.returncode or cs.returncode:
-        raise UnpackError('failed to extract srpm')
+        raise UnpackError('failed to extract rpm')
 
 
 #def get_buildrequires(filename):
@@ -490,7 +490,7 @@ def main():
     workdir = tempfile.mkdtemp(prefix='buildreq-check')
 
     try:
-        extract_srpm(workdir, srpm)
+        extract_rpm(workdir, srpm)
         specs = glob.glob(workdir + '/*.spec')
         # from mock/py/mockbuild/backend.py:
         # if there's more than one then someone is an idiot
