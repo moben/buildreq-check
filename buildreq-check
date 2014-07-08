@@ -45,6 +45,10 @@ class MockError(Exception):
     pass
 
 
+class UnpackError(Exception):
+    pass
+
+
 def sep_print(lst, sep):
     return sep.join(map(str,lst))
 
@@ -66,6 +70,9 @@ def extract_srpm(workdir, srpm):
             stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'))
 
     cs.communicate()
+
+    if rc.returncode or cs.returncode:
+        raise UnpackError('failed to extract srpm')
 
 
 #def get_buildrequires(filename):
