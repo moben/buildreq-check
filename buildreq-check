@@ -105,12 +105,11 @@ def rpm_get_header(rpm_filename):
     return h
 
 
-def rpm_cmp(rpm1_filename, rpm2_filename):
+def cmp_rpm(rpm1_filename, rpm2_filename):
     header1 = rpm_get_header(rpm1_filename)
     header2 = rpm_get_header(rpm2_filename)
 
-    # 
-    tags = frozenset((
+    rpm_tags = frozenset((
         'RPMSENSE_ANY',
         'RPMSENSE_CONFIG',
         'RPMSENSE_EQUAL',
@@ -338,7 +337,7 @@ def rpm_cmp(rpm1_filename, rpm2_filename):
 
     ret = True
 
-    for tag in tags - skipped_tags:
+    for tag in rpm_tags - skipped_tags:
         if header1[getattr(rpm, tag)] == header2[getattr(rpm, tag)]:
             logger.debug('HEADER EQUAL: TAG: %s', tag)
         else:
@@ -357,7 +356,7 @@ def rpm_cmp_dir(olddir, newdir):
             continue
 
         newrpm = os.path.join(newdir, os.path.basename(rpm))
-        if not rpm_cmp(rpm, newrpm):
+        if not cmp_rpm(rpm, newrpm):
             logger.info('rpms %s and %s differ', rpm, newrpm)
             return False
 
