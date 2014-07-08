@@ -476,6 +476,8 @@ def main():
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
     parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
                         dest='clean', action='store_false', default=True)
+    parser.add_argument('--debug', '-d', help='build an additional reference rpm to debug this script',
+                        dest='debug', action='store_true', default=False)
     parser.add_argument('--loglvl', '-l',
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
@@ -502,6 +504,13 @@ def main():
         # here we update our yum cache. It will stay the same for the remainder of the run
         logger.info('building reference rpm')
         build_rpm(srpm, workdir, yum_update=True)
+
+        if args.debug:
+            debugdir=os.path.join(workdir, 'buildreq-check-debug')
+            logger.info('building another reference rpm for debugging purposes')
+            build_rpm(srpm, debugdir)
+            if not rpm_cmp_dir(workdir, debugdir):
+                raise Exception('built two different reference rpms. This should never happen!')
 
         unneeded = find_unneeded_buildreqs(workdir, spec)
 
