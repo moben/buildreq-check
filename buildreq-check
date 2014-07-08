@@ -38,7 +38,7 @@ import sys
 import tempfile
 
 #NOTE not sure if it is good practice to do this at global scope?
-logger = logging.getLogger('buildreq_drop')
+logger = logging.getLogger('buildreq-check')
 
 
 class MockError(Exception):
@@ -434,7 +434,7 @@ def find_unneeded_buildreqs(workdir, spec):
             continue
 
         build_id = get_buildid(combination)
-        build_name = os.path.basename(spec)[:-5] + '-buildreq_drop-' + build_id
+        build_name = os.path.basename(spec)[:-5] + '-buildreq-check-' + build_id
 
         testspec = os.path.join(workdir, build_name + '.spec')
         resultdir = os.path.join(workdir, build_name + '-results')
@@ -485,7 +485,7 @@ def main():
     logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.loglvl.upper()))
     srpm = args.srpm
 
-    workdir = tempfile.mkdtemp(prefix='buildreq_drop')
+    workdir = tempfile.mkdtemp(prefix='buildreq-check')
 
     try:
         extract_srpm(workdir, srpm)
