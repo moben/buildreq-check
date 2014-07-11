@@ -351,6 +351,8 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 
     ret = True
 
+    logger.debug('comparing rpms %s and %s', rpm1_filename, rpm2_filename)
+
     # TODO make this short-circuit when a difference is found
     for tag in rpm_tags - skipped_tags:
         if header1[getattr(rpm, tag)] == header2[getattr(rpm, tag)]:
