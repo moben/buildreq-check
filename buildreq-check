@@ -493,7 +493,10 @@ def main():
         specs = glob.glob(workdir + '/*.spec')
         # from mock/py/mockbuild/backend.py:
         # if there's more than one then someone is an idiot
-        spec = specs[0]
+        try:
+            spec = specs[0]
+        except IndexError:
+            raise Exception('Can\'t find spec file. Is this a srpm?')
 
         # clean mock root cache
         # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
