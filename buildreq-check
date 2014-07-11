@@ -24,6 +24,13 @@ from __future__ import unicode_literals
 from future_builtins import map, filter
 from functools import reduce
 
+# cmp
+import magic
+
+# cmp_python
+import dis
+import marshal
+
 import argparse
 import glob
 import hashlib
@@ -64,10 +71,12 @@ def list_powerset(lst):
     return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
 
 
-def extract_rpm(workdir, rpm):
+def extract_rpm(workdir, rpm, filename=None):
+    match = filename if filename else '*'
+
     rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
-    cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames'], cwd=workdir,
-            stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open('/dev/null', 'w'))
+    cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames', match],
+            cwd=workdir, stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
 
     cs.communicate()
 
@@ -189,7 +198,6 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         'RPMTAG_FILEPROVIDE',
         'RPMTAG_FILERDEVS',
         'RPMTAG_FILEREQUIRE',
-        'RPMTAG_FILESIZES',
         'RPMTAG_FILESTATES',
         'RPMTAG_FILEUSERNAME',
         'RPMTAG_FILEVERIFYFLAGS',
@@ -211,7 +219,6 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         'RPMTAG_INSTPREFIXES',
         'RPMTAG_LICENSE',
         'RPMTAG_LONGARCHIVESIZE',
-        'RPMTAG_LONGFILESIZES',
         'RPMTAG_LONGSIGSIZE',
         'RPMTAG_LONGSIZE',
         'RPMTAG_N',
@@ -324,7 +331,6 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
     
 
     skipped_tags = frozenset((
-        'RPMTAG_FILEDIGESTS',
         'RPMTAG_FILEMTIMES',
         'RPMTAG_NOT_FOUND',
         'RPMTAG_BUILDTIME',
@@ -335,8 +341,17 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         'RPMTAG_SIGSIZE'
         ))
 
+    # filename first, rest doesn't matter
+    content_tags = (
+        'RPMTAG_FILENAMES',
+        'RPMTAG_FILEDIGESTS',
+        'RPMTAG_FILESIZES',
+        'RPMTAG_LONGFILESIZES'
+        )
+
     ret = True
 
+    # TODO make this short-circuit when a difference is found
     for tag in rpm_tags - skipped_tags:
         if header1[getattr(rpm, tag)] == header2[getattr(rpm, tag)]:
             logger.debug('HEADER EQUAL: TAG: %s', tag)
@@ -346,7 +361,56 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
             logger.debug('HEADER DIFFERENT: HEADER2: %s', header2[getattr(rpm, tag)])
             ret = False
 
+    for f1, f2 in zip(*map(lambda hdr: zip(*(hdr[getattr(rpm, tag)] for tag in content_tags)), (header1, header2))):
+        if f1 != f2:
+            ret = ret and cmp_rpm_contents(rmp1, rmp2, f1[0])
+
     return ret
+
+
+# assumes file lists were already checked for equality
+def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
+    rmp1_tree, rmp2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
+
+    if not os.path.isdir(rmp1_tree):
+        extract_rpm(rmp1_tree, rpm1_filename, content_filename)
+    if not os.path.isdir(rmp2_tree):
+        extract_rpm(rmp2_tree, rpm2_filename, content_filename)
+
+    c = (
+        ('python .* byte-compiled', cmp_python),
+        ('ELF', cmp_elf)
+    )
+    comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
+    ms = magic.open(magic.NONE)
+    ms.load()
+
+    file1, file2 = map(lambda t: os.path.join(t, content_filename), (rpm1_tree, rpm2_tree))
+    filetype1, filetype2 = ms.file(file1), ms.file(file2)
+    if filetype1 != filetype2:
+        logger.debug('differing filetypes:\n   %s\n   %s', file1, file2)
+        return False
+
+    for regex, func in comparators:
+        if regex.search(filetype1):
+            return func(file1, file2)
+
+    return False
+
+
+def cmp_python(file1, file2):
+    with open(file1, 'rb') as f1, open(file2, 'rb') as f2:
+        # 4 byte magic, 4 byte timestamp. skip the timestamp
+        # can't use dis.dis, as we might be a different python version
+        return f1.read()[8:] == f2.read()[8:]
+
+
+def cmp_elf(file1, file2):
+    try:
+        dump1, dump2 = map(lambda x: subprocess.check_output(['objdump', '-d', x], universal_newlines=True), (file1, file2))
+        return dump1 == dump2
+    except CalledProcessError as e:
+        raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
 
 
 def rpm_cmp_dir(olddir, newdir):
