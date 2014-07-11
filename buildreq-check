@@ -428,7 +428,7 @@ def rpm_cmp_dir(olddir, newdir):
 
 
 def run_mock(args, yum_update=False):
-    mock_args = ['mock', '--plugin-option=root_cache:compress_program=pigz']
+    mock_args = ['mock']
 
     if not yum_update:
         mock_args += ['--offline']
