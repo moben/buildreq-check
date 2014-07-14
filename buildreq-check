@@ -31,6 +31,9 @@ import magic
 import dis
 import marshal
 
+# cmp_jar
+import zipfile
+
 import argparse
 import glob
 import hashlib
@@ -380,8 +383,9 @@ def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
         extract_rpm(rpm2_tree, rpm2_filename, content_filename)
 
     c = (
+        ('ELF', cmp_elf),
         ('python .* byte-compiled', cmp_python),
-        ('ELF', cmp_elf)
+        ('Zip archive data', cmp_jar)
     )
     comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
     ms = magic.open(magic.NONE)
@@ -413,6 +417,18 @@ def cmp_elf(file1, file2):
         return dump1 == dump2
     except CalledProcessError as e:
         raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
+
+
+def cmp_jar(file1, file2):
+    with zipfile.ZipFile(file1, 'r', allowZip64=True) as zip1, zipfile.ZipFile(file2, 'r', allowZip64=True) as zip2:
+        namelist1, namelist2 = frozenset(zip1.namelist()), frozenset(zip2.namelist())
+        if namelist1 ^ namelist2:
+            return False
+        for name in namelist1:
+            if zip1.read(name) != zip2.read(name):
+                return False
+
+    return True
 
 
 def rpm_cmp_dir(olddir, newdir):
