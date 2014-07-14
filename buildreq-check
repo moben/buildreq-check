@@ -75,7 +75,10 @@ def list_powerset(lst):
 
 
 def extract_rpm(workdir, rpm, filename=None):
-    match = filename if filename else '*'
+    if not os.path.isdir(workdir):
+        os.mkdir(workdir)
+
+    match = '.' + filename if filename else '*'
 
     rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
     cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames', match],
@@ -85,6 +88,9 @@ def extract_rpm(workdir, rpm, filename=None):
 
     if rc.returncode or cs.returncode:
         raise UnpackError('failed to extract rpm')
+    # make sure to use 'match' so that the file path is relative
+    if filename and not os.path.lexists(os.path.join(workdir, match)):
+        raise UnpackError('failed to extract rpm: requested file missing')
 
 
 #def get_buildrequires(filename):
@@ -381,10 +387,11 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 # assumes file lists were already checked for equality
 def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
     rpm1_tree, rpm2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
+    file1, file2 = map(lambda t: os.path.join(t, content_filename.lstrip('/')), (rpm1_tree, rpm2_tree))
 
-    if not os.path.isdir(rpm1_tree):
+    if not os.path.lexists(file1):
         extract_rpm(rpm1_tree, rpm1_filename, content_filename)
-    if not os.path.isdir(rpm2_tree):
+    if not os.path.lexists(file2):
         extract_rpm(rpm2_tree, rpm2_filename, content_filename)
 
     c = (
@@ -396,7 +403,6 @@ def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
     ms = magic.open(magic.NONE)
     ms.load()
 
-    file1, file2 = map(lambda t: os.path.join(t, content_filename), (rpm1_tree, rpm2_tree))
     filetype1, filetype2 = ms.file(file1), ms.file(file2)
     if filetype1 != filetype2:
         logger.debug('differing filetypes:\n   %s\n   %s', file1, file2)
