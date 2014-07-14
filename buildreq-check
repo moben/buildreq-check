@@ -365,19 +365,19 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 
     for f1, f2 in zip(*map(lambda hdr: zip(*(hdr[getattr(rpm, tag)] for tag in content_tags)), (header1, header2))):
         if f1 != f2:
-            ret = ret and cmp_rpm_contents(rmp1, rmp2, f1[0])
+            ret = ret and cmp_rpm_contents(rpm1, rpm2, f1[0])
 
     return ret
 
 
 # assumes file lists were already checked for equality
 def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
-    rmp1_tree, rmp2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
+    rpm1_tree, rpm2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
 
-    if not os.path.isdir(rmp1_tree):
-        extract_rpm(rmp1_tree, rpm1_filename, content_filename)
-    if not os.path.isdir(rmp2_tree):
-        extract_rpm(rmp2_tree, rpm2_filename, content_filename)
+    if not os.path.isdir(rpm1_tree):
+        extract_rpm(rpm1_tree, rpm1_filename, content_filename)
+    if not os.path.isdir(rpm2_tree):
+        extract_rpm(rpm2_tree, rpm2_filename, content_filename)
 
     c = (
         ('python .* byte-compiled', cmp_python),
