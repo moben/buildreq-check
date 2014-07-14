@@ -34,6 +34,12 @@ import marshal
 # cmp_jar
 import zipfile
 
+# cmp_html
+try:
+    import HTMLParser
+except ImportError:
+    import html.parser as HTMLParser
+
 import argparse
 import glob
 import hashlib
@@ -57,6 +63,24 @@ class MockError(Exception):
 
 class UnpackError(Exception):
     pass
+
+
+class HTMLWithoutComments(HTMLParser.HTMLParser):
+    def __init__(self, filename):
+        HTMLParser.HTMLParser.__init__(self)
+        self.parsed = []
+        with open(filename) as f:
+            self.feed(f.read())
+    def handle(self, *args):
+        self.parsed.append(tuple(args))
+    handle_starttag = handle
+    handle_endtag = handle
+    handle_data = handle
+    handle_entityref = handle
+    handle_charref = handle
+    handle_decl = handle
+    handle_pi = handle
+    unknown_decl = handle
 
 
 def sep_print(lst, sep):
@@ -396,6 +420,7 @@ def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
 
     c = (
         ('ELF', cmp_elf),
+        ('HTML document', cmp_html),
         ('python .* byte-compiled', cmp_python),
         ('Zip archive data', cmp_jar)
     )
@@ -440,6 +465,13 @@ def cmp_jar(file1, file2):
                 return False
 
     return True
+
+
+def cmp_html(file1, file2):
+    p1 = HTMLWithoutComments(file1)
+    p2 = HTMLWithoutComments(file2)
+
+    return p1.parsed == p2.parsed
 
 
 def rpm_cmp_dir(olddir, newdir):
