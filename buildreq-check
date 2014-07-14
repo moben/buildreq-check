@@ -356,20 +356,25 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 
     logger.debug('comparing rpms %s and %s', rpm1_filename, rpm2_filename)
 
+    differing_tags = set()
+    differing_files = set()
+
     # TODO make this short-circuit when a difference is found
     for tag in rpm_tags - skipped_tags:
-        if header1[getattr(rpm, tag)] == header2[getattr(rpm, tag)]:
-            logger.debug('HEADER EQUAL: TAG: %s', tag)
-        else:
-            logger.debug('HEADER DIFFERENT: TAG: %s', tag)
-            logger.debug('HEADER DIFFERENT: HEADER1: %s', header1[getattr(rpm, tag)])
-            logger.debug('HEADER DIFFERENT: HEADER2: %s', header2[getattr(rpm, tag)])
+        if header1[getattr(rpm, tag)] != header2[getattr(rpm, tag)]:
+            differing_tags.add(tag)
             ret = False
 
     for f1, f2 in zip(*map(lambda hdr: zip(*(hdr[getattr(rpm, tag)] for tag in content_tags)), (header1, header2))):
         if f1 != f2:
-            ret = ret and cmp_rpm_contents(rpm1, rpm2, f1[0])
+            fn = f1[0]
+            if not cmp_rpm_contents(rpm1_filename, rpm2_filename, fn):
+                ret = False
+                differing_files.add(fn)
 
+    if not ret:
+        logger.debug('RPM HEADERS DIFFERENING: %s', sep_print(differing_tags, ', '))
+        logger.debug('RPM FILES DIFFERENING: %s', sep_print(differing_files, ', '))
     return ret
 
 
