@@ -395,7 +395,7 @@ def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
         ('Zip archive data', cmp_jar)
     )
     comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
-    ms = magic.open(magic.NONE)
+    ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
     ms.load()
 
     filetype1, filetype2 = ms.file(file1), ms.file(file2)
@@ -419,7 +419,7 @@ def cmp_python(file1, file2):
 
 def cmp_elf(file1, file2):
     try:
-        dump1, dump2 = map(lambda x: subprocess.check_output(['objdump', '-d', x], universal_newlines=True), (file1, file2))
+        dump1, dump2 = map(lambda x: subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(x)[2], (file1, file2))
         return dump1 == dump2
     except CalledProcessError as e:
         raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
