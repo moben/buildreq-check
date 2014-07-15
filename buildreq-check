@@ -333,15 +333,22 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         ))
     
 
+    # skip filetype and all sizes as we do our own content-aware comparison later
     skipped_tags = frozenset((
-        'RPMTAG_FILEMTIMES',
-        'RPMTAG_NOT_FOUND',
+        'RPMTAG_ARCHIVESIZE',
         'RPMTAG_BUILDTIME',
+        'RPMTAG_CLASSDICT',
+        'RPMTAG_FILECLASS',
+        'RPMTAG_FILEMTIMES',
         'RPMTAG_HDRID',
         'RPMTAG_HEADERIMMUTABLE',
-        'RPMTAG_PKGID',
+        'RPMTAG_LONGARCHIVESIZE',
         'RPMTAG_LONGSIGSIZE',
-        'RPMTAG_SIGSIZE'
+        'RPMTAG_LONGSIZE',
+        'RPMTAG_NOT_FOUND',
+        'RPMTAG_PKGID',
+        'RPMTAG_SIGSIZE',
+        'RPMTAG_SIZE'
         ))
 
     # filename first, rest doesn't matter
