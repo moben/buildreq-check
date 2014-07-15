@@ -65,6 +65,7 @@ class UnpackError(Exception):
     pass
 
 
+# record everything except comments as that is where timestamps are stored. compare the rest
 class HTMLWithoutComments(HTMLParser.HTMLParser):
     def __init__(self, filename):
         HTMLParser.HTMLParser.__init__(self)
