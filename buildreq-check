@@ -43,7 +43,12 @@ except ImportError:
 import argparse
 import glob
 import hashlib
+try:
+    from itertools import zip_longest
+except ImportError:
+    from itertools import izip_longest as zip_longest
 import logging
+import operator
 import os
 import os.path
 import re
@@ -99,23 +104,29 @@ def list_powerset(lst):
     return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
 
 
-def extract_rpm(workdir, rpm, filename=None):
+def extract_rpm(workdir, rpm, filenames=None):
     if not os.path.isdir(workdir):
         os.mkdir(workdir)
 
-    match = '.' + filename if filename else '*'
+    with tempfile.NamedTemporaryFile() as patternfile:
+        patterns = ['.' + f for f in filenames] if filenames else ['*']
+        for f in patterns:
+            patternfile.write(f + '\n')
+        patternfile.flush()
 
-    rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
-    cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames', match],
-            cwd=workdir, stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
+        rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
+        cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames',
+                                       '--unconditional', '--pattern-file', patternfile.name],
+                cwd=workdir, stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
 
-    cs.communicate()
+        cs.communicate()
 
-    if rc.returncode or cs.returncode:
-        raise UnpackError('failed to extract rpm')
-    # make sure to use 'match' so that the file path is relative
-    if filename and not os.path.lexists(os.path.join(workdir, match)):
-        raise UnpackError('failed to extract rpm: requested file missing')
+        if rc.returncode or cs.returncode:
+            raise UnpackError('failed to extract rpm')
+        if filenames:
+            missing = list(filter(lambda x: not os.path.lexists(os.path.join(workdir, x)), patterns))
+            if missing:
+                raise UnpackError('failed to extract rpm: requested file missing: %s' % sep_print(missing, ', '))
 
 
 #def get_buildrequires(filename):
@@ -155,7 +166,6 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
     rpm_tags = frozenset((
         'RPMTAG_ARCH',
         'RPMTAG_ARCHIVESIZE',
-        'RPMTAG_BASENAMES',
         'RPMTAG_BUGURL',
         'RPMTAG_BUILDARCHS',
         'RPMTAG_BUILDHOST',
@@ -174,8 +184,6 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         'RPMTAG_DBINSTANCE',
         'RPMTAG_DEPENDSDICT',
         'RPMTAG_DESCRIPTION',
-        'RPMTAG_DIRINDEXES',
-        'RPMTAG_DIRNAMES',
         'RPMTAG_DISTRIBUTION',
         'RPMTAG_DISTTAG',
         'RPMTAG_DISTURL',
@@ -187,28 +195,7 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         'RPMTAG_EXCLUDEOS',
         'RPMTAG_EXCLUSIVEARCH',
         'RPMTAG_EXCLUSIVEOS',
-        'RPMTAG_FILECAPS',
-        'RPMTAG_FILECLASS',
-        'RPMTAG_FILECOLORS',
-        'RPMTAG_FILECONTEXTS',
-        'RPMTAG_FILEDEPENDSN',
-        'RPMTAG_FILEDEPENDSX',
-        'RPMTAG_FILEDEVICES',
         'RPMTAG_FILEDIGESTALGO',
-        'RPMTAG_FILEFLAGS',
-        'RPMTAG_FILEGROUPNAME',
-        'RPMTAG_FILEINODES',
-        'RPMTAG_FILELANGS',
-        'RPMTAG_FILELINKTOS',
-        'RPMTAG_FILEMODES',
-        'RPMTAG_FILENAMES',
-        'RPMTAG_FILENLINKS',
-        'RPMTAG_FILEPROVIDE',
-        'RPMTAG_FILERDEVS',
-        'RPMTAG_FILEREQUIRE',
-        'RPMTAG_FILESTATES',
-        'RPMTAG_FILEUSERNAME',
-        'RPMTAG_FILEVERIFYFLAGS',
         'RPMTAG_FSCONTEXTS',
         'RPMTAG_GIF',
         'RPMTAG_GROUP',
@@ -334,12 +321,17 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
     
 
     # skip filetype and all sizes as we do our own content-aware comparison later
+    # skip basenames, dirnames, dirindexes as we compare full filenames anyway
     skipped_tags = frozenset((
         'RPMTAG_ARCHIVESIZE',
+        'RPMTAG_BASENAMES',
         'RPMTAG_BUILDTIME',
         'RPMTAG_CLASSDICT',
+        'RPMTAG_DIRINDEXES',
+        'RPMTAG_DIRNAMES',
         'RPMTAG_FILECLASS',
         'RPMTAG_FILEMTIMES',
+        'RPMTAG_FILEINODES',
         'RPMTAG_HDRID',
         'RPMTAG_HEADERIMMUTABLE',
         'RPMTAG_LONGARCHIVESIZE',
@@ -352,12 +344,36 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
         ))
 
     # filename first, rest doesn't matter
-    content_tags = (
+    file_tags = (
         'RPMTAG_FILENAMES',
+        'RPMTAG_FILECAPS',
+        'RPMTAG_FILECLASS',
+        'RPMTAG_FILECOLORS',
+        'RPMTAG_FILECONTEXTS',
+        'RPMTAG_FILEDEPENDSN',
+        'RPMTAG_FILEDEPENDSX',
+        'RPMTAG_FILEDEVICES',
         'RPMTAG_FILEDIGESTS',
+        'RPMTAG_FILEFLAGS',
+        'RPMTAG_FILEGROUPNAME',
+        'RPMTAG_FILELANGS',
+        'RPMTAG_FILELINKTOS',
+        'RPMTAG_FILEMODES',
+        'RPMTAG_FILENAMES',
+        'RPMTAG_FILENLINKS',
+        'RPMTAG_FILEPROVIDE',
+        'RPMTAG_FILERDEVS',
+        'RPMTAG_FILEREQUIRE',
         'RPMTAG_FILESIZES',
-        'RPMTAG_LONGFILESIZES'
+        'RPMTAG_FILESTATES',
+        'RPMTAG_FILEUSERNAME',
+        'RPMTAG_FILEVERIFYFLAGS',
+        'RPMTAG_LONGFILESIZES',
         )
+
+    ignored_files = frozenset(map(re.compile, (
+        '^/usr/lib/debug/.build-id',
+        )))
 
     ret = True
 
@@ -372,12 +388,19 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
             differing_tags.add(tag)
             ret = False
 
-    for f1, f2 in zip(*map(lambda hdr: zip(*(hdr[getattr(rpm, tag)] for tag in content_tags)), (header1, header2))):
+    compare_content = set()
+
+    filetuples = map(lambda hdr: zip_longest(*(hdr[getattr(rpm, tag)] for tag in file_tags)), (header1, header2))
+    filteredfiles = map(lambda l: filter(lambda t: not any(regex.search(t[0]) for regex in ignored_files), l), filetuples)
+    sortedfiles = map(lambda l: sorted(l, key=operator.itemgetter(0)), filteredfiles)
+
+    for f1, f2 in zip(*sortedfiles):
         if f1 != f2:
-            fn = f1[0]
-            if not cmp_rpm_contents(rpm1_filename, rpm2_filename, fn):
-                ret = False
-                differing_files.add(fn)
+            compare_content.add(f1[0])
+
+    if not cmp_rpm_contents(rpm1_filename, rpm2_filename, compare_content):
+        ret = False
+#        differing_files.add(fn)
 
     if not ret:
         logger.debug('RPM HEADERS DIFFERENING: %s', sep_print(differing_tags, ', '))
@@ -386,35 +409,42 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 
 
 # assumes file lists were already checked for equality
-def cmp_rpm_contents(rpm1_filename, rpm2_filename, content_filename):
+def cmp_rpm_contents(rpm1_filename, rpm2_filename, filenames):
+    ret = True
     rpm1_tree, rpm2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
-    file1, file2 = map(lambda t: os.path.join(t, content_filename.lstrip('/')), (rpm1_tree, rpm2_tree))
 
-    if not os.path.lexists(file1):
-        extract_rpm(rpm1_tree, rpm1_filename, content_filename)
-    if not os.path.lexists(file2):
-        extract_rpm(rpm2_tree, rpm2_filename, content_filename)
+    extract_rpm(rpm1_tree, rpm1_filename, filenames)
+    extract_rpm(rpm2_tree, rpm2_filename, filenames)
 
-    c = (
-        ('ELF', cmp_elf),
-        ('HTML document', cmp_html),
-        ('python .* byte-compiled', cmp_python),
-        ('Zip archive data', cmp_jar)
-    )
-    comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
-    ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
-    ms.load()
+    for file1, file2 in zip(*map(lambda t: map(lambda f: os.path.join(t, f.lstrip('/')), filenames) , (rpm1_tree, rpm2_tree))):
 
-    filetype1, filetype2 = ms.file(file1), ms.file(file2)
-    if filetype1 != filetype2:
-        logger.debug('differing filetypes:\n   %s\n   %s', file1, file2)
-        return False
+        c = (
+            ('ELF', cmp_elf),
+            ('G-IR binary database,', cmp_typelib),
+            ('HTML document', cmp_html),
+            ('python .* byte-compiled', cmp_python),
+            ('Zip archive data', cmp_jar)
+        )
+        comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
+        ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
+        ms.load()
 
-    for regex, func in comparators:
-        if regex.search(filetype1):
-            return func(file1, file2)
+        filetype1, filetype2 = ms.file(file1), ms.file(file2)
+        if filetype1 != filetype2:
+            logger.debug('differing filetypes:\n   %s\n   %s', file1, file2)
+            return False
 
-    return False
+        for regex, func in comparators:
+            if regex.search(filetype1):
+                ret = ret and func(file1, file2)
+                if not func(file1, file2):
+                    print('different:', file1, file2)
+                break
+        else:
+            print('unknown filetype', file1, file2)
+            return False
+
+    return ret
 
 
 def cmp_python(file1, file2):
@@ -428,8 +458,16 @@ def cmp_elf(file1, file2):
     try:
         dump1, dump2 = map(lambda x: subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(x)[2], (file1, file2))
         return dump1 == dump2
-    except CalledProcessError as e:
+    except subprocess.CalledProcessError as e:
         raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
+
+
+def cmp_typelib(file1, file2):
+    try:
+        gir1, gir2 = map(lambda x: subprocess.check_output(['g-ir-generate', '--all', x], universal_newlines=True), (file1, file2))
+        return gir1 == gir2
+    except subprocess.CalledProcessError as e:
+        raise Exception('%s failed with %s\nIs this really a typelib file?', e.cmd, e.output)
 
 
 def cmp_jar(file1, file2):
