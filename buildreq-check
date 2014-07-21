@@ -403,8 +403,8 @@ def cmp_rpm(rpm1_filename, rpm2_filename):
 #        differing_files.add(fn)
 
     if not ret:
-        logger.debug('RPM HEADERS DIFFERENING: %s', sep_print(differing_tags, ', '))
-        logger.debug('RPM FILES DIFFERENING: %s', sep_print(differing_files, ', '))
+        logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
+        logger.info('differing rpm contents: %s', sep_print(differing_files, ', '))
     return ret
 
 
@@ -517,8 +517,8 @@ def run_mock(args, yum_update=False):
         p = subprocess.Popen(mock_args, universal_newlines=True,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-        for line in p.stdout:
-            logger.debug('mock: ' + line.rstrip('\n'))
+#        for line in p.stdout:
+#            logger.debug('mock: ' + line.rstrip('\n'))
 
         p.wait()
 
@@ -561,8 +561,6 @@ def find_unneeded_buildreqs(workdir, spec):
     buildreqs.add('bash')
     possibly_unneeded = list_powerset(buildreqs)
     breaking = set()
-    logger.debug('combinations of possibly unneeded Requires: %s',
-            sep_print(map(lambda x: sep_print(x, ', '), possibly_unneeded), '\n   '))
 
     for combination in filter(None, possibly_unneeded):
         if any(b < combination for b in breaking):
@@ -589,7 +587,7 @@ def find_unneeded_buildreqs(workdir, spec):
             breaking.add(combination)
             continue
         finally:
-            logger.info('build without %s: srpm %s',
+            logger.debug('build without %s: srpm %s',
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         try:
@@ -598,11 +596,10 @@ def find_unneeded_buildreqs(workdir, spec):
             breaking.add(combination)
             continue
         finally:
-            logger.info('build without %s: rpm %s',
+            logger.debug('build without %s: rpm %s',
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         if not rpm_cmp_dir(workdir, resultdir):
-            logger.info('build without %s: rpms differ', sep_print(combination, ', '))
             breaking.add(combination)
 
     unneeded = frozenset(frozenset(possibly_unneeded) - breaking)
@@ -656,9 +653,8 @@ def main():
 
         unneeded = find_unneeded_buildreqs(workdir, spec)
 
-        print('possibly unneeded BuildRequires:')
         for s in unneeded:
-            print('    ', sep_print(s, ', '))
+            print(srpm + ':', sep_print(s, ', '))
 
     finally:
         if args.clean:
