@@ -27,10 +27,6 @@ from functools import reduce
 # cmp
 import magic
 
-# cmp_python
-import dis
-import marshal
-
 # cmp_jar
 import zipfile
 
@@ -70,6 +66,389 @@ class UnpackError(Exception):
     pass
 
 
+class Rpm(object):
+    def __init__(self, name):
+        self.name = name
+
+        ts = rpm.ts()
+        fd = os.open(self.name, os.O_RDONLY)
+        self.header = ts.hdrFromFdno(fd)
+        os.close(fd)
+
+    def extract(self, workdir, filenames=None):
+        if not os.path.isdir(workdir):
+            os.mkdir(workdir)
+
+        with tempfile.NamedTemporaryFile() as patternfile:
+            patterns = ['.' + f for f in filenames] if filenames else ['*']
+            for f in patterns:
+                patternfile.write(f + '\n')
+            patternfile.flush()
+
+            rc = subprocess.Popen(['rpm2cpio', self.name],stdout=subprocess.PIPE)
+            cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames',
+                                           '--unconditional', '--pattern-file', patternfile.name],
+                    cwd=workdir, stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
+
+            cs.communicate()
+
+            if rc.returncode or cs.returncode:
+                raise UnpackError('failed to extract rpm')
+            if filenames:
+                missing = list(filter(lambda x: not os.path.lexists(os.path.join(workdir, x)), patterns))
+                if missing:
+                    raise UnpackError('failed to extract rpm: requested file missing: %s' % sep_print(missing, ', '))
+
+    def __eq__(self, other):
+        rpm_tags = frozenset((
+            'RPMTAG_ARCH',
+            'RPMTAG_ARCHIVESIZE',
+            'RPMTAG_BUGURL',
+            'RPMTAG_BUILDARCHS',
+            'RPMTAG_BUILDHOST',
+            'RPMTAG_BUILDTIME',
+            'RPMTAG_CHANGELOGNAME',
+            'RPMTAG_CHANGELOGTEXT',
+            'RPMTAG_CHANGELOGTIME',
+            'RPMTAG_CLASSDICT',
+            'RPMTAG_COLLECTIONS',
+            'RPMTAG_CONFLICTFLAGS',
+            'RPMTAG_CONFLICTNAME',
+            'RPMTAG_CONFLICTNEVRS',
+            'RPMTAG_CONFLICTS',
+            'RPMTAG_CONFLICTVERSION',
+            'RPMTAG_COOKIE',
+            'RPMTAG_DBINSTANCE',
+            'RPMTAG_DEPENDSDICT',
+            'RPMTAG_DESCRIPTION',
+            'RPMTAG_DISTRIBUTION',
+            'RPMTAG_DISTTAG',
+            'RPMTAG_DISTURL',
+            'RPMTAG_DSAHEADER',
+            'RPMTAG_EPOCH',
+            'RPMTAG_EPOCHNUM',
+            'RPMTAG_EVR',
+            'RPMTAG_EXCLUDEARCH',
+            'RPMTAG_EXCLUDEOS',
+            'RPMTAG_EXCLUSIVEARCH',
+            'RPMTAG_EXCLUSIVEOS',
+            'RPMTAG_FILEDIGESTALGO',
+            'RPMTAG_FSCONTEXTS',
+            'RPMTAG_GIF',
+            'RPMTAG_GROUP',
+            'RPMTAG_HDRID',
+            'RPMTAG_HEADERCOLOR',
+            'RPMTAG_HEADERI18NTABLE',
+            'RPMTAG_HEADERIMAGE',
+            'RPMTAG_HEADERIMMUTABLE',
+            'RPMTAG_HEADERREGIONS',
+            'RPMTAG_HEADERSIGNATURES',
+            'RPMTAG_ICON',
+            'RPMTAG_INSTALLCOLOR',
+            'RPMTAG_INSTALLTID',
+            'RPMTAG_INSTALLTIME',
+            'RPMTAG_INSTFILENAMES',
+            'RPMTAG_INSTPREFIXES',
+            'RPMTAG_LICENSE',
+            'RPMTAG_LONGARCHIVESIZE',
+            'RPMTAG_LONGSIGSIZE',
+            'RPMTAG_LONGSIZE',
+            'RPMTAG_NAME',
+            'RPMTAG_NEVR',
+            'RPMTAG_NEVRA',
+            'RPMTAG_NOPATCH',
+            'RPMTAG_NOSOURCE',
+            'RPMTAG_NOT_FOUND',
+            'RPMTAG_NVR',
+            'RPMTAG_NVRA',
+            'RPMTAG_OBSOLETEFLAGS',
+            'RPMTAG_OBSOLETENAME',
+            'RPMTAG_OBSOLETENEVRS',
+            'RPMTAG_OBSOLETES',
+            'RPMTAG_OBSOLETEVERSION',
+            'RPMTAG_OLDFILENAMES',
+            'RPMTAG_OPTFLAGS',
+            'RPMTAG_ORDERFLAGS',
+            'RPMTAG_ORDERNAME',
+            'RPMTAG_ORDERVERSION',
+            'RPMTAG_ORIGBASENAMES',
+            'RPMTAG_ORIGDIRINDEXES',
+            'RPMTAG_ORIGDIRNAMES',
+            'RPMTAG_ORIGFILENAMES',
+            'RPMTAG_OS',
+            'RPMTAG_PACKAGER',
+            'RPMTAG_PATCH',
+            'RPMTAG_PATCHESFLAGS',
+            'RPMTAG_PATCHESNAME',
+            'RPMTAG_PATCHESVERSION',
+            'RPMTAG_PAYLOADCOMPRESSOR',
+            'RPMTAG_PAYLOADFLAGS',
+            'RPMTAG_PAYLOADFORMAT',
+            'RPMTAG_PKGID',
+            'RPMTAG_PLATFORM',
+            'RPMTAG_POLICIES',
+            'RPMTAG_POLICYFLAGS',
+            'RPMTAG_POLICYNAMES',
+            'RPMTAG_POLICYTYPES',
+            'RPMTAG_POLICYTYPESINDEXES',
+            'RPMTAG_POSTIN',
+            'RPMTAG_POSTINFLAGS',
+            'RPMTAG_POSTINPROG',
+            'RPMTAG_POSTTRANS',
+            'RPMTAG_POSTTRANSFLAGS',
+            'RPMTAG_POSTTRANSPROG',
+            'RPMTAG_POSTUN',
+            'RPMTAG_POSTUNFLAGS',
+            'RPMTAG_POSTUNPROG',
+            'RPMTAG_PREFIXES',
+            'RPMTAG_PREIN',
+            'RPMTAG_PREINFLAGS',
+            'RPMTAG_PREINPROG',
+            'RPMTAG_PRETRANS',
+            'RPMTAG_PRETRANSFLAGS',
+            'RPMTAG_PRETRANSPROG',
+            'RPMTAG_PREUN',
+            'RPMTAG_PREUNFLAGS',
+            'RPMTAG_PREUNPROG',
+            'RPMTAG_PROVIDEFLAGS',
+            'RPMTAG_PROVIDENAME',
+            'RPMTAG_PROVIDENEVRS',
+            'RPMTAG_PROVIDES',
+            'RPMTAG_PROVIDEVERSION',
+            'RPMTAG_PUBKEYS',
+            'RPMTAG_RECONTEXTS',
+            'RPMTAG_RELEASE',
+            'RPMTAG_REMOVETID',
+            'RPMTAG_REQUIREFLAGS',
+            'RPMTAG_REQUIRENAME',
+            'RPMTAG_REQUIRENEVRS',
+            'RPMTAG_REQUIRES',
+            'RPMTAG_REQUIREVERSION',
+            'RPMTAG_RPMVERSION',
+            'RPMTAG_RSAHEADER',
+            'RPMTAG_SIGGPG',
+            'RPMTAG_SIGPGP',
+            'RPMTAG_SIGSIZE',
+            'RPMTAG_SIGSIZE',
+            'RPMTAG_SIZE',
+            'RPMTAG_SOURCE',
+            'RPMTAG_SOURCEPACKAGE',
+            'RPMTAG_SOURCEPKGID',
+            'RPMTAG_SOURCERPM',
+            'RPMTAG_SUMMARY',
+            'RPMTAG_TRIGGERCONDS',
+            'RPMTAG_TRIGGERFLAGS',
+            'RPMTAG_TRIGGERINDEX',
+            'RPMTAG_TRIGGERNAME',
+            'RPMTAG_TRIGGERSCRIPTFLAGS',
+            'RPMTAG_TRIGGERSCRIPTPROG',
+            'RPMTAG_TRIGGERSCRIPTS',
+            'RPMTAG_TRIGGERTYPE',
+            'RPMTAG_TRIGGERVERSION',
+            'RPMTAG_URL',
+            'RPMTAG_VCS',
+            'RPMTAG_VENDOR',
+            'RPMTAG_VERBOSE',
+            'RPMTAG_VERIFYSCRIPT',
+            'RPMTAG_VERIFYSCRIPTFLAGS',
+            'RPMTAG_VERIFYSCRIPTPROG',
+            'RPMTAG_VERSION',
+            'RPMTAG_XPM',
+            ))
+
+
+        # skip filetype and all sizes as we do our own content-aware comparison later
+        # skip basenames, dirnames, dirindexes as we compare full filenames anyway
+        skipped_tags = frozenset((
+            'RPMTAG_ARCHIVESIZE',
+            'RPMTAG_BASENAMES',
+            'RPMTAG_BUILDTIME',
+            'RPMTAG_CLASSDICT',
+            'RPMTAG_DIRINDEXES',
+            'RPMTAG_DIRNAMES',
+            'RPMTAG_FILECLASS',
+            'RPMTAG_FILEMTIMES',
+            'RPMTAG_FILEINODES',
+            'RPMTAG_HDRID',
+            'RPMTAG_HEADERIMMUTABLE',
+            'RPMTAG_LONGARCHIVESIZE',
+            'RPMTAG_LONGSIGSIZE',
+            'RPMTAG_LONGSIZE',
+            'RPMTAG_NOT_FOUND',
+            'RPMTAG_PKGID',
+            'RPMTAG_SIGSIZE',
+            'RPMTAG_SIZE'
+            ))
+
+        # filename first, rest doesn't matter
+        file_tags = (
+            'RPMTAG_FILENAMES',
+            'RPMTAG_FILECAPS',
+            'RPMTAG_FILECLASS',
+            'RPMTAG_FILECOLORS',
+            'RPMTAG_FILECONTEXTS',
+            'RPMTAG_FILEDEPENDSN',
+            'RPMTAG_FILEDEPENDSX',
+            'RPMTAG_FILEDEVICES',
+            'RPMTAG_FILEDIGESTS',
+            'RPMTAG_FILEFLAGS',
+            'RPMTAG_FILEGROUPNAME',
+            'RPMTAG_FILELANGS',
+            'RPMTAG_FILELINKTOS',
+            'RPMTAG_FILEMODES',
+            'RPMTAG_FILENAMES',
+            'RPMTAG_FILENLINKS',
+            'RPMTAG_FILEPROVIDE',
+            'RPMTAG_FILERDEVS',
+            'RPMTAG_FILEREQUIRE',
+            'RPMTAG_FILESIZES',
+            'RPMTAG_FILESTATES',
+            'RPMTAG_FILEUSERNAME',
+            'RPMTAG_FILEVERIFYFLAGS',
+            'RPMTAG_LONGFILESIZES',
+            )
+
+        ignored_files = frozenset(map(re.compile, (
+            '^/usr/lib/debug/.build-id',
+            )))
+
+        ret = True
+
+        logger.debug('comparing rpms %s and %s', self.name, other.name)
+
+        differing_tags = set()
+        differing_files = set()
+
+        # TODO make this short-circuit when a difference is found
+        for tag in rpm_tags - skipped_tags:
+            if self.header[getattr(rpm, tag)] != other.header[getattr(rpm, tag)]:
+                differing_tags.add(tag)
+                ret = False
+
+        compare_content = set()
+
+        filetuples = map(lambda hdr: zip_longest(*(hdr[getattr(rpm, tag)] for tag in file_tags)), (self.header, other.header))
+        filteredfiles = map(lambda l: filter(lambda t: not any(regex.search(t[0]) for regex in ignored_files), l), filetuples)
+        sortedfiles = map(lambda l: sorted(l, key=operator.itemgetter(0)), filteredfiles)
+
+        for f1, f2 in zip(*sortedfiles):
+            if f1 != f2:
+                compare_content.add(f1[0])
+
+        if not self.cmp_contents(other, compare_content):
+            ret = False
+#           differing_files.add(fn)
+
+        if not ret:
+            logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
+            logger.info('differing rpm contents: %s', sep_print(differing_files, ', '))
+        return ret
+
+
+    # assumes file lists were already checked for equality
+    def cmp_contents(self, other, filenames):
+        ret = True
+        self_tree, other_tree = self.name + '.contents', other.name + '.contents'
+
+        self.extract(self_tree, filenames)
+        other.extract(other_tree, filenames)
+
+        for file1, file2 in zip(*map(lambda t: map(lambda f: Content(os.path.join(t, f.lstrip('/'))), filenames) , (self_tree, other_tree))):
+            ret = ret and (file1 == file2)
+
+        return ret
+
+
+class Srpm(Rpm):
+    def build_rpms(self, resultdir, yum_update=False, clean=True):
+        args = ['--rebuild', self.name,
+                '--resultdir', resultdir]
+
+        if not clean:
+            args+=['--no-clean']
+
+        run_mock(args, yum_update)
+
+
+
+class Content(object):
+    ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
+    ms.load()
+
+    def __init__(self, name):
+        self.name = name
+        self.filetype = self.ms.file(name)
+
+        c = (
+            ('ELF',                     self.__cmp_elf),
+            ('G-IR binary database,',   self.__cmp_typelib),
+            ('HTML document',           self.__cmp_html),
+            ('python .* byte-compiled', self.__cmp_python),
+            ('Zip archive data',        self.__cmp_jar)
+        )
+        comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
+
+        for regex, func in comparators:
+            if regex.search(self.filetype):
+                self.cmp = func
+                break
+        else:
+            logger.warning('Unknown filetype %s for file %s, will be treated as different from every file', self.filetype, self.name)
+            self.filetype = self.cmp = None
+
+    def __eq__(self, other):
+        if not (self.filetype and other.filetype) \
+                or self.filetype != other.filetype:
+            return False
+
+        return self.cmp(other)
+
+    def __cmp_python(self, other):
+        with open(self.name, 'rb') as f1, open(other.name, 'rb') as f2:
+            # 4 byte magic, 4 byte timestamp. skip the timestamp
+            # can't use dis.dis, as we might be a different python version
+            return f1.read()[8:] == f2.read()[8:]
+
+
+    def __cmp_elf(self, other):
+        try:
+            dump1 = subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(self.name)[2]
+            dump2 = subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(other.name)[2]
+            return dump1 == dump2
+        except subprocess.CalledProcessError as e:
+            raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
+
+
+    def __cmp_typelib(self, other):
+        try:
+            gir1 = subprocess.check_output(['g-ir-generate', '--all', self.name], universal_newlines=True)
+            gir2 = subprocess.check_output(['g-ir-generate', '--all', other.name], universal_newlines=True)
+            return gir1 == gir2
+        except subprocess.CalledProcessError as e:
+            raise Exception('%s failed with %s\nIs this really a typelib file?', e.cmd, e.output)
+
+
+    def __cmp_jar(self, other):
+        with zipfile.ZipFile(self.name, 'r', allowZip64=True) as zip1, zipfile.ZipFile(other.name, 'r', allowZip64=True) as zip2:
+
+            namelist1, namelist2 = frozenset(zip1.namelist()), frozenset(zip2.namelist())
+            if namelist1 ^ namelist2:
+                return False
+            for name in namelist1:
+                if zip1.read(name) != zip2.read(name):
+                    return False
+
+        return True
+
+
+    def __cmp_html(self, other):
+        p1 = HTMLWithoutComments(self.name)
+        p2 = HTMLWithoutComments(other.name)
+
+        return p1.parsed == p2.parsed
+
+
+
 # record everything except comments as that is where timestamps are stored. compare the rest
 class HTMLWithoutComments(HTMLParser.HTMLParser):
     def __init__(self, filename):
@@ -89,6 +468,42 @@ class HTMLWithoutComments(HTMLParser.HTMLParser):
     unknown_decl = handle
 
 
+class Spec(object):
+    def __init__(self, name):
+        self.name = name
+        spkg = rpm.spec(self.name)
+        self.buildrequires = frozenset(spkg.sourceHeader[rpm.RPMTAG_REQUIRENEVRS])
+
+    def rewrite(self, new_name, excludes):
+        with open(self.name) as oldfile, open(new_name, 'w') as newfile:
+            for req in self.buildrequires - excludes:
+                newfile.write('BuildRequires: %s\n' % req)
+
+            pattern = re.compile('^(|%\S+)BuildRequires\s*:.*$', re.IGNORECASE)
+            for line in oldfile.read().splitlines():
+                if pattern.match(line) == None:
+                    newfile.write(line)
+                    newfile.write('\n')
+
+            newfile.flush()
+
+        return Spec(new_name)
+
+    def build_srpm(self, sourcedir, resultdir, yum_update=False, clean=True):
+        args = ['--buildsrpm',
+            '--spec', self.name,
+            '--sources', sourcedir,
+            '--resultdir', resultdir]
+
+        if not clean:
+            args+=['--no-clean']
+
+        if run_mock(args, yum_update):
+            # there should only be one
+            srpm = glob.glob(resultdir + '/*.src.rpm')
+            return Srpm(srpm[0])
+
+
 def sep_print(lst, sep):
     return sep.join(map(str,lst))
 
@@ -104,400 +519,16 @@ def list_powerset(lst):
     return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
 
 
-def extract_rpm(workdir, rpm, filenames=None):
-    if not os.path.isdir(workdir):
-        os.mkdir(workdir)
-
-    with tempfile.NamedTemporaryFile() as patternfile:
-        patterns = ['.' + f for f in filenames] if filenames else ['*']
-        for f in patterns:
-            patternfile.write(f + '\n')
-        patternfile.flush()
-
-        rc = subprocess.Popen(['rpm2cpio', rpm],stdout=subprocess.PIPE)
-        cs = subprocess.Popen(['cpio', '--quiet', '--extract', '--make-directories', '--no-absolute-filenames',
-                                       '--unconditional', '--pattern-file', patternfile.name],
-                cwd=workdir, stdin=rc.stdout, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
-
-        cs.communicate()
-
-        if rc.returncode or cs.returncode:
-            raise UnpackError('failed to extract rpm')
-        if filenames:
-            missing = list(filter(lambda x: not os.path.lexists(os.path.join(workdir, x)), patterns))
-            if missing:
-                raise UnpackError('failed to extract rpm: requested file missing: %s' % sep_print(missing, ', '))
-
-
-#def get_buildrequires(filename):
-#    ts = rpm.transactionset()
-#    fd = os.open(filename, os.o_rdonly)
-#    h = ts.hdrfromfdno(fd)
-#    os.close(fd)
-#    return h[rpm.rpmtag_requirenevrs]
-def get_buildrequires(spec_filename):
-    spkg = rpm.spec(spec_filename)
-    return set(spkg.sourceHeader[rpm.RPMTAG_REQUIRENEVRS])
-
-
-def write_spec(orig_spec, new_spec, buildrequires):
-    with open(orig_spec) as oldfile, open(new_spec, 'w') as newfile:
-        for req in buildrequires:
-            newfile.write('BuildRequires: %s\n' % req)
-        pattern = re.compile('^(|%\S+)BuildRequires\s*:.*$', re.IGNORECASE)
-        for line in oldfile.read().splitlines():
-            if pattern.match(line) == None:
-                newfile.write(line)
-                newfile.write('\n')
-
-
-def rpm_get_header(rpm_filename):
-    ts = rpm.ts()
-    fd = os.open(rpm_filename, os.O_RDONLY)
-    h = ts.hdrFromFdno(fd)
-    os.close(fd)
-    return h
-
-
-def cmp_rpm(rpm1_filename, rpm2_filename):
-    header1 = rpm_get_header(rpm1_filename)
-    header2 = rpm_get_header(rpm2_filename)
-
-    rpm_tags = frozenset((
-        'RPMTAG_ARCH',
-        'RPMTAG_ARCHIVESIZE',
-        'RPMTAG_BUGURL',
-        'RPMTAG_BUILDARCHS',
-        'RPMTAG_BUILDHOST',
-        'RPMTAG_BUILDTIME',
-        'RPMTAG_CHANGELOGNAME',
-        'RPMTAG_CHANGELOGTEXT',
-        'RPMTAG_CHANGELOGTIME',
-        'RPMTAG_CLASSDICT',
-        'RPMTAG_COLLECTIONS',
-        'RPMTAG_CONFLICTFLAGS',
-        'RPMTAG_CONFLICTNAME',
-        'RPMTAG_CONFLICTNEVRS',
-        'RPMTAG_CONFLICTS',
-        'RPMTAG_CONFLICTVERSION',
-        'RPMTAG_COOKIE',
-        'RPMTAG_DBINSTANCE',
-        'RPMTAG_DEPENDSDICT',
-        'RPMTAG_DESCRIPTION',
-        'RPMTAG_DISTRIBUTION',
-        'RPMTAG_DISTTAG',
-        'RPMTAG_DISTURL',
-        'RPMTAG_DSAHEADER',
-        'RPMTAG_EPOCH',
-        'RPMTAG_EPOCHNUM',
-        'RPMTAG_EVR',
-        'RPMTAG_EXCLUDEARCH',
-        'RPMTAG_EXCLUDEOS',
-        'RPMTAG_EXCLUSIVEARCH',
-        'RPMTAG_EXCLUSIVEOS',
-        'RPMTAG_FILEDIGESTALGO',
-        'RPMTAG_FSCONTEXTS',
-        'RPMTAG_GIF',
-        'RPMTAG_GROUP',
-        'RPMTAG_HDRID',
-        'RPMTAG_HEADERCOLOR',
-        'RPMTAG_HEADERI18NTABLE',
-        'RPMTAG_HEADERIMAGE',
-        'RPMTAG_HEADERIMMUTABLE',
-        'RPMTAG_HEADERREGIONS',
-        'RPMTAG_HEADERSIGNATURES',
-        'RPMTAG_ICON',
-        'RPMTAG_INSTALLCOLOR',
-        'RPMTAG_INSTALLTID',
-        'RPMTAG_INSTALLTIME',
-        'RPMTAG_INSTFILENAMES',
-        'RPMTAG_INSTPREFIXES',
-        'RPMTAG_LICENSE',
-        'RPMTAG_LONGARCHIVESIZE',
-        'RPMTAG_LONGSIGSIZE',
-        'RPMTAG_LONGSIZE',
-        'RPMTAG_NAME',
-        'RPMTAG_NEVR',
-        'RPMTAG_NEVRA',
-        'RPMTAG_NOPATCH',
-        'RPMTAG_NOSOURCE',
-        'RPMTAG_NOT_FOUND',
-        'RPMTAG_NVR',
-        'RPMTAG_NVRA',
-        'RPMTAG_OBSOLETEFLAGS',
-        'RPMTAG_OBSOLETENAME',
-        'RPMTAG_OBSOLETENEVRS',
-        'RPMTAG_OBSOLETES',
-        'RPMTAG_OBSOLETEVERSION',
-        'RPMTAG_OLDFILENAMES',
-        'RPMTAG_OPTFLAGS',
-        'RPMTAG_ORDERFLAGS',
-        'RPMTAG_ORDERNAME',
-        'RPMTAG_ORDERVERSION',
-        'RPMTAG_ORIGBASENAMES',
-        'RPMTAG_ORIGDIRINDEXES',
-        'RPMTAG_ORIGDIRNAMES',
-        'RPMTAG_ORIGFILENAMES',
-        'RPMTAG_OS',
-        'RPMTAG_PACKAGER',
-        'RPMTAG_PATCH',
-        'RPMTAG_PATCHESFLAGS',
-        'RPMTAG_PATCHESNAME',
-        'RPMTAG_PATCHESVERSION',
-        'RPMTAG_PAYLOADCOMPRESSOR',
-        'RPMTAG_PAYLOADFLAGS',
-        'RPMTAG_PAYLOADFORMAT',
-        'RPMTAG_PKGID',
-        'RPMTAG_PLATFORM',
-        'RPMTAG_POLICIES',
-        'RPMTAG_POLICYFLAGS',
-        'RPMTAG_POLICYNAMES',
-        'RPMTAG_POLICYTYPES',
-        'RPMTAG_POLICYTYPESINDEXES',
-        'RPMTAG_POSTIN',
-        'RPMTAG_POSTINFLAGS',
-        'RPMTAG_POSTINPROG',
-        'RPMTAG_POSTTRANS',
-        'RPMTAG_POSTTRANSFLAGS',
-        'RPMTAG_POSTTRANSPROG',
-        'RPMTAG_POSTUN',
-        'RPMTAG_POSTUNFLAGS',
-        'RPMTAG_POSTUNPROG',
-        'RPMTAG_PREFIXES',
-        'RPMTAG_PREIN',
-        'RPMTAG_PREINFLAGS',
-        'RPMTAG_PREINPROG',
-        'RPMTAG_PRETRANS',
-        'RPMTAG_PRETRANSFLAGS',
-        'RPMTAG_PRETRANSPROG',
-        'RPMTAG_PREUN',
-        'RPMTAG_PREUNFLAGS',
-        'RPMTAG_PREUNPROG',
-        'RPMTAG_PROVIDEFLAGS',
-        'RPMTAG_PROVIDENAME',
-        'RPMTAG_PROVIDENEVRS',
-        'RPMTAG_PROVIDES',
-        'RPMTAG_PROVIDEVERSION',
-        'RPMTAG_PUBKEYS',
-        'RPMTAG_RECONTEXTS',
-        'RPMTAG_RELEASE',
-        'RPMTAG_REMOVETID',
-        'RPMTAG_REQUIREFLAGS',
-        'RPMTAG_REQUIRENAME',
-        'RPMTAG_REQUIRENEVRS',
-        'RPMTAG_REQUIRES',
-        'RPMTAG_REQUIREVERSION',
-        'RPMTAG_RPMVERSION',
-        'RPMTAG_RSAHEADER',
-        'RPMTAG_SIGGPG',
-        'RPMTAG_SIGPGP',
-        'RPMTAG_SIGSIZE',
-        'RPMTAG_SIGSIZE',
-        'RPMTAG_SIZE',
-        'RPMTAG_SOURCE',
-        'RPMTAG_SOURCEPACKAGE',
-        'RPMTAG_SOURCEPKGID',
-        'RPMTAG_SOURCERPM',
-        'RPMTAG_SUMMARY',
-        'RPMTAG_TRIGGERCONDS',
-        'RPMTAG_TRIGGERFLAGS',
-        'RPMTAG_TRIGGERINDEX',
-        'RPMTAG_TRIGGERNAME',
-        'RPMTAG_TRIGGERSCRIPTFLAGS',
-        'RPMTAG_TRIGGERSCRIPTPROG',
-        'RPMTAG_TRIGGERSCRIPTS',
-        'RPMTAG_TRIGGERTYPE',
-        'RPMTAG_TRIGGERVERSION',
-        'RPMTAG_URL',
-        'RPMTAG_VCS',
-        'RPMTAG_VENDOR',
-        'RPMTAG_VERBOSE',
-        'RPMTAG_VERIFYSCRIPT',
-        'RPMTAG_VERIFYSCRIPTFLAGS',
-        'RPMTAG_VERIFYSCRIPTPROG',
-        'RPMTAG_VERSION',
-        'RPMTAG_XPM',
-        ))
-    
-
-    # skip filetype and all sizes as we do our own content-aware comparison later
-    # skip basenames, dirnames, dirindexes as we compare full filenames anyway
-    skipped_tags = frozenset((
-        'RPMTAG_ARCHIVESIZE',
-        'RPMTAG_BASENAMES',
-        'RPMTAG_BUILDTIME',
-        'RPMTAG_CLASSDICT',
-        'RPMTAG_DIRINDEXES',
-        'RPMTAG_DIRNAMES',
-        'RPMTAG_FILECLASS',
-        'RPMTAG_FILEMTIMES',
-        'RPMTAG_FILEINODES',
-        'RPMTAG_HDRID',
-        'RPMTAG_HEADERIMMUTABLE',
-        'RPMTAG_LONGARCHIVESIZE',
-        'RPMTAG_LONGSIGSIZE',
-        'RPMTAG_LONGSIZE',
-        'RPMTAG_NOT_FOUND',
-        'RPMTAG_PKGID',
-        'RPMTAG_SIGSIZE',
-        'RPMTAG_SIZE'
-        ))
-
-    # filename first, rest doesn't matter
-    file_tags = (
-        'RPMTAG_FILENAMES',
-        'RPMTAG_FILECAPS',
-        'RPMTAG_FILECLASS',
-        'RPMTAG_FILECOLORS',
-        'RPMTAG_FILECONTEXTS',
-        'RPMTAG_FILEDEPENDSN',
-        'RPMTAG_FILEDEPENDSX',
-        'RPMTAG_FILEDEVICES',
-        'RPMTAG_FILEDIGESTS',
-        'RPMTAG_FILEFLAGS',
-        'RPMTAG_FILEGROUPNAME',
-        'RPMTAG_FILELANGS',
-        'RPMTAG_FILELINKTOS',
-        'RPMTAG_FILEMODES',
-        'RPMTAG_FILENAMES',
-        'RPMTAG_FILENLINKS',
-        'RPMTAG_FILEPROVIDE',
-        'RPMTAG_FILERDEVS',
-        'RPMTAG_FILEREQUIRE',
-        'RPMTAG_FILESIZES',
-        'RPMTAG_FILESTATES',
-        'RPMTAG_FILEUSERNAME',
-        'RPMTAG_FILEVERIFYFLAGS',
-        'RPMTAG_LONGFILESIZES',
-        )
-
-    ignored_files = frozenset(map(re.compile, (
-        '^/usr/lib/debug/.build-id',
-        )))
-
-    ret = True
-
-    logger.debug('comparing rpms %s and %s', rpm1_filename, rpm2_filename)
-
-    differing_tags = set()
-    differing_files = set()
-
-    # TODO make this short-circuit when a difference is found
-    for tag in rpm_tags - skipped_tags:
-        if header1[getattr(rpm, tag)] != header2[getattr(rpm, tag)]:
-            differing_tags.add(tag)
-            ret = False
-
-    compare_content = set()
-
-    filetuples = map(lambda hdr: zip_longest(*(hdr[getattr(rpm, tag)] for tag in file_tags)), (header1, header2))
-    filteredfiles = map(lambda l: filter(lambda t: not any(regex.search(t[0]) for regex in ignored_files), l), filetuples)
-    sortedfiles = map(lambda l: sorted(l, key=operator.itemgetter(0)), filteredfiles)
-
-    for f1, f2 in zip(*sortedfiles):
-        if f1 != f2:
-            compare_content.add(f1[0])
-
-    if not cmp_rpm_contents(rpm1_filename, rpm2_filename, compare_content):
-        ret = False
-#        differing_files.add(fn)
-
-    if not ret:
-        logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
-        logger.info('differing rpm contents: %s', sep_print(differing_files, ', '))
-    return ret
-
-
-# assumes file lists were already checked for equality
-def cmp_rpm_contents(rpm1_filename, rpm2_filename, filenames):
-    ret = True
-    rpm1_tree, rpm2_tree = rpm1_filename + '.contents', rpm2_filename + '.contents'
-
-    extract_rpm(rpm1_tree, rpm1_filename, filenames)
-    extract_rpm(rpm2_tree, rpm2_filename, filenames)
-
-    for file1, file2 in zip(*map(lambda t: map(lambda f: os.path.join(t, f.lstrip('/')), filenames) , (rpm1_tree, rpm2_tree))):
-
-        c = (
-            ('ELF', cmp_elf),
-            ('G-IR binary database,', cmp_typelib),
-            ('HTML document', cmp_html),
-            ('python .* byte-compiled', cmp_python),
-            ('Zip archive data', cmp_jar)
-        )
-        comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
-        ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
-        ms.load()
-
-        filetype1, filetype2 = ms.file(file1), ms.file(file2)
-        if filetype1 != filetype2:
-            logger.debug('differing filetypes:\n   %s\n   %s', file1, file2)
-            return False
-
-        for regex, func in comparators:
-            if regex.search(filetype1):
-                ret = ret and func(file1, file2)
-                if not func(file1, file2):
-                    print('different:', file1, file2)
-                break
-        else:
-            print('unknown filetype', file1, file2)
-            return False
-
-    return ret
-
-
-def cmp_python(file1, file2):
-    with open(file1, 'rb') as f1, open(file2, 'rb') as f2:
-        # 4 byte magic, 4 byte timestamp. skip the timestamp
-        # can't use dis.dis, as we might be a different python version
-        return f1.read()[8:] == f2.read()[8:]
-
-
-def cmp_elf(file1, file2):
-    try:
-        dump1, dump2 = map(lambda x: subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(x)[2], (file1, file2))
-        return dump1 == dump2
-    except subprocess.CalledProcessError as e:
-        raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
-
-
-def cmp_typelib(file1, file2):
-    try:
-        gir1, gir2 = map(lambda x: subprocess.check_output(['g-ir-generate', '--all', x], universal_newlines=True), (file1, file2))
-        return gir1 == gir2
-    except subprocess.CalledProcessError as e:
-        raise Exception('%s failed with %s\nIs this really a typelib file?', e.cmd, e.output)
-
-
-def cmp_jar(file1, file2):
-    with zipfile.ZipFile(file1, 'r', allowZip64=True) as zip1, zipfile.ZipFile(file2, 'r', allowZip64=True) as zip2:
-        namelist1, namelist2 = frozenset(zip1.namelist()), frozenset(zip2.namelist())
-        if namelist1 ^ namelist2:
-            return False
-        for name in namelist1:
-            if zip1.read(name) != zip2.read(name):
-                return False
-
-    return True
-
-
-def cmp_html(file1, file2):
-    p1 = HTMLWithoutComments(file1)
-    p2 = HTMLWithoutComments(file2)
-
-    return p1.parsed == p2.parsed
-
 
 def rpm_cmp_dir(olddir, newdir):
-    rpms = glob.glob(olddir + '/*.rpm')
+    rpms = (Rpm(r) for r in glob.glob(olddir + '/*.rpm'))
     for rpm in rpms:
-        if rpm.endswith('.src.rpm'):
+        if rpm.name.endswith('.src.rpm'):
             continue
 
-        newrpm = os.path.join(newdir, os.path.basename(rpm))
-        if not cmp_rpm(rpm, newrpm):
-            logger.info('rpms %s and %s differ', rpm, newrpm)
+        newrpm = Rpm(os.path.join(newdir, os.path.basename(rpm.name)))
+        if not rpm == newrpm:
+            logger.info('rpms %s and %s differ', rpm.name, newrpm.name)
             return False
 
     return True
@@ -530,36 +561,11 @@ def run_mock(args, yum_update=False):
     raise MockError(mock_args)
 
 
-def build_srpm(sourcedir, spec, resultdir, yum_update=False, clean=True):
-    args = ['--buildsrpm',
-        '--spec', spec,
-        '--sources', sourcedir,
-        '--resultdir', resultdir]
 
-    if not clean:
-        args+=['--no-clean']
-
-    if run_mock(args, yum_update):
-        # there should only be one
-        srpm = glob.glob(resultdir + '/*.src.rpm')
-        return srpm[0]
-
-
-def build_rpm(srpm, resultdir, yum_update=False, clean=True):
-    args = ['--rebuild', srpm,
-        '--resultdir', resultdir]
-
-    if not clean:
-        args+=['--no-clean']
-
-    run_mock(args, yum_update)
 
 
 def find_unneeded_buildreqs(workdir, spec):
-    buildreqs = get_buildrequires(spec)
-    #TODO remove this
-    buildreqs.add('bash')
-    possibly_unneeded = list_powerset(buildreqs)
+    possibly_unneeded = list_powerset(spec.buildrequires)
     breaking = set()
 
     for combination in filter(None, possibly_unneeded):
@@ -571,18 +577,18 @@ def find_unneeded_buildreqs(workdir, spec):
             continue
 
         build_id = get_buildid(combination)
-        build_name = os.path.basename(spec)[:-5] + '-buildreq-check-' + build_id
+        build_name = os.path.basename(spec.name)[:-5] + '-buildreq-check-' + build_id
 
-        testspec = os.path.join(workdir, build_name + '.spec')
         resultdir = os.path.join(workdir, build_name + '-results')
 
-        write_spec(spec, testspec, buildreqs - combination)
+        testspec_name = os.path.join(workdir, build_name + '.spec')
+        testspec = spec.rewrite(testspec_name, combination)
 
         logger.info('trying build without: %s', sep_print(combination, ', '))
         logger.debug('result directory: %s', resultdir)
 
         try:
-            srpm = build_srpm(workdir, testspec, resultdir)
+            srpm = testspec.build_srpm(workdir, resultdir)
         except MockError:
             breaking.add(combination)
             continue
@@ -591,7 +597,7 @@ def find_unneeded_buildreqs(workdir, spec):
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         try:
-            build_rpm(srpm, resultdir)
+            srpm.build_rpms(resultdir)
         except MockError:
             breaking.add(combination)
             continue
@@ -607,7 +613,7 @@ def find_unneeded_buildreqs(workdir, spec):
     return frozenset(f for f in unneeded if not any(f < g for g in unneeded))
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
     parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
@@ -618,20 +624,24 @@ def main():
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
                         default='info', metavar='lvl')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.loglvl.upper()))
-    srpm = args.srpm
+    srpm = Srpm(args.srpm)
 
     workdir = tempfile.mkdtemp(prefix='buildreq-check')
 
     try:
-        extract_rpm(workdir, srpm)
+        srpm.extract(workdir)
         specs = glob.glob(workdir + '/*.spec')
         # from mock/py/mockbuild/backend.py:
         # if there's more than one then someone is an idiot
         try:
-            spec = specs[0]
+            spec = Spec(specs[0])
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
@@ -642,19 +652,19 @@ def main():
 
         # here we update our yum cache. It will stay the same for the remainder of the run
         logger.info('building reference rpm')
-        build_rpm(srpm, workdir, yum_update=True)
+        srpm.build_rpms(workdir, yum_update=True)
 
         if args.debug:
             debugdir=os.path.join(workdir, 'buildreq-check-debug')
             logger.info('building another reference rpm for debugging purposes')
-            build_rpm(srpm, debugdir)
+            srpm.build_rpms(debugdir)
             if not rpm_cmp_dir(workdir, debugdir):
                 raise Exception('built two different reference rpms. This should never happen!')
 
         unneeded = find_unneeded_buildreqs(workdir, spec)
 
         for s in unneeded:
-            print(srpm + ':', sep_print(s, ', '))
+            print(srpm.name + ':', sep_print(s, ', '))
 
     finally:
         if args.clean:
