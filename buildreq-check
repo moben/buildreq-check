@@ -406,8 +406,8 @@ class Content(object):
 
     def __cmp_elf(self, other):
         try:
-            dump1 = subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(self.name)[2]
-            dump2 = subprocess.check_output(['objdump', '-d', x], universal_newlines=True).partition(other.name)[2]
+            dump1 = subprocess.check_output(['objdump', '-d', self.name], universal_newlines=True).partition(self.name)[2]
+            dump2 = subprocess.check_output(['objdump', '-d', other.name], universal_newlines=True).partition(other.name)[2]
             return dump1 == dump2
         except subprocess.CalledProcessError as e:
             raise Exception('%s failed with %s\nIs this really an ELF file?', e.cmd, e.output)
