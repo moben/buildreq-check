@@ -30,6 +30,9 @@ import magic
 # cmp_zip
 import zipfile
 
+# cmp_gzip
+import gzip
+
 # cmp_html
 try:
     import HTMLParser
@@ -379,6 +382,7 @@ class Content(object):
             ('HTML document',           self.__cmp_html),
             ('python .* byte-compiled', self.__cmp_python),
             ('Zip archive data',        self.__cmp_zip),
+            ('gzip compressed data',    self.__cmp_gzip),
         )
         comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
 
@@ -433,6 +437,10 @@ class Content(object):
                     return False
 
         return True
+
+
+    def __cmp_gzip(self, other):
+        return gzip.open(self.name, 'rb').read() == gzip.open(other.name, 'rb').read()
 
 
     def __cmp_html(self, other):
