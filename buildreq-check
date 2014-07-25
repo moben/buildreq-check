@@ -27,7 +27,7 @@ from functools import reduce
 # cmp
 import magic
 
-# cmp_jar
+# cmp_zip
 import zipfile
 
 # cmp_html
@@ -378,7 +378,7 @@ class Content(object):
             ('G-IR binary database,',   self.__cmp_typelib),
             ('HTML document',           self.__cmp_html),
             ('python .* byte-compiled', self.__cmp_python),
-            ('Zip archive data',        self.__cmp_jar)
+            ('Zip archive data',        self.__cmp_zip),
         )
         comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
 
@@ -422,7 +422,7 @@ class Content(object):
             raise Exception('%s failed with %s\nIs this really a typelib file?', e.cmd, e.output)
 
 
-    def __cmp_jar(self, other):
+    def __cmp_zip(self, other):
         with zipfile.ZipFile(self.name, 'r', allowZip64=True) as zip1, zipfile.ZipFile(other.name, 'r', allowZip64=True) as zip2:
 
             namelist1, namelist2 = frozenset(zip1.namelist()), frozenset(zip2.namelist())
