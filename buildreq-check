@@ -67,6 +67,8 @@ class UnpackError(Exception):
 
 
 class Rpm(object):
+    is_source = False
+
     def __init__(self, name):
         self.name = name
 
@@ -360,15 +362,7 @@ class Rpm(object):
 
 
 class Srpm(Rpm):
-    def build_rpms(self, resultdir, yum_update=False, clean=True):
-        args = ['--rebuild', self.name,
-                '--resultdir', resultdir]
-
-        if not clean:
-            args+=['--no-clean']
-
-        run_mock(args, yum_update)
-
+    is_source = True
 
 
 class Content(object):
@@ -469,8 +463,9 @@ class HTMLWithoutComments(HTMLParser.HTMLParser):
 
 
 class Spec(object):
-    def __init__(self, name):
+    def __init__(self, name, sourcedir):
         self.name = name
+        self.sourcedir = sourcedir
         spkg = rpm.spec(self.name)
         self.buildrequires = frozenset(spkg.sourceHeader[rpm.RPMTAG_REQUIRENEVRS])
 
@@ -487,18 +482,74 @@ class Spec(object):
 
             newfile.flush()
 
-        return Spec(new_name)
+        return Spec(new_name, self.sourcedir)
 
-    def build_srpm(self, sourcedir, resultdir, yum_update=False, clean=True):
-        args = ['--buildsrpm',
-            '--spec', self.name,
-            '--sources', sourcedir,
-            '--resultdir', resultdir]
 
-        if not clean:
-            args+=['--no-clean']
+class Chroot(object):
+    def __init__(self, packages=None):
+        self.packages = packages
 
-        if run_mock(args, yum_update):
+        # clean mock root cache
+        # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
+        logger.debug('cleaning mock root cache')
+        self.run_mock(['--clean', '--scrub=root-cache'])
+
+    def run_mock(self, args, yum_update=False):
+        mock_args = ['mock']
+
+        if not yum_update:
+            mock_args += ['--offline']
+
+        mock_args += args
+
+        try:
+            logger.debug('running: %s', sep_print(mock_args, ' '))
+            # universal newlines to get unicode strings instead of byte strings for python3 compatibility
+            p = subprocess.Popen(mock_args, universal_newlines=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+#        for line in p.stdout:
+#            logger.debug('mock: ' + line.rstrip('\n'))
+
+            p.wait()
+
+            if not p.returncode:
+                return True
+        except subprocess.CalledProcessError:
+            pass
+
+        raise MockError(mock_args)
+
+    def build_rpms(self, srpm, resultdir, yum_update=False, clean=True):
+        if not srpm.is_source:
+            raise TypeError('Not a source rpm: %s', srpm.name)
+
+        if clean:
+            self.run_mock(['--init'], yum_update)
+
+        if self.packages:
+            self.run_mock(['--install'] + self.packages, yum_update)
+
+        args = ['--no-clean',
+                '--rebuild', srpm.name,
+                '--resultdir', resultdir]
+
+        self.run_mock(args, yum_update)
+
+    def build_srpm(self, spec, resultdir, yum_update=False, clean=True):
+        if clean:
+            self.run_mock(['--init'], yum_update)
+
+        if self.packages:
+            self.run_mock(['--install'] + self.packages, yum_update)
+
+        args = ['--no-clean',
+                '--buildsrpm',
+                '--spec', spec.name,
+                '--sources', spec.sourcedir,
+                '--resultdir', resultdir]
+
+        if self.run_mock(args, yum_update):
             # there should only be one
             srpm = glob.glob(resultdir + '/*.src.rpm')
             return Srpm(srpm[0])
@@ -534,37 +585,7 @@ def rpm_cmp_dir(olddir, newdir):
     return True
 
 
-def run_mock(args, yum_update=False):
-    mock_args = ['mock']
-
-    if not yum_update:
-        mock_args += ['--offline']
-
-    mock_args += args
-
-    try:
-        logger.debug('running: %s', sep_print(mock_args, ' '))
-        # universal newlines to get unicode strings instead of byte strings for python3 compatibility
-        p = subprocess.Popen(mock_args, universal_newlines=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-#        for line in p.stdout:
-#            logger.debug('mock: ' + line.rstrip('\n'))
-
-        p.wait()
-
-        if not p.returncode:
-            return True
-    except subprocess.CalledProcessError:
-        pass
-
-    raise MockError(mock_args)
-
-
-
-
-
-def find_unneeded_buildreqs(workdir, spec):
+def find_unneeded_buildreqs(chroot, spec, workdir):
     possibly_unneeded = list_powerset(spec.buildrequires)
     breaking = set()
 
@@ -588,7 +609,7 @@ def find_unneeded_buildreqs(workdir, spec):
         logger.debug('result directory: %s', resultdir)
 
         try:
-            srpm = testspec.build_srpm(workdir, resultdir)
+            srpm = chroot.build_srpm(testspec, resultdir)
         except MockError:
             breaking.add(combination)
             continue
@@ -597,7 +618,7 @@ def find_unneeded_buildreqs(workdir, spec):
                     sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
         try:
-            srpm.build_rpms(resultdir)
+            chroot.build_rpms(srpm, resultdir)
         except MockError:
             breaking.add(combination)
             continue
@@ -624,6 +645,9 @@ def parse_args():
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
                         default='info', metavar='lvl')
+    parser.add_argument('--install', '-i',
+                        help='additional packages to install in the testing chroot',
+                        dest='packages', nargs='+')
     return parser.parse_args()
 
 
@@ -641,27 +665,24 @@ def main():
         # from mock/py/mockbuild/backend.py:
         # if there's more than one then someone is an idiot
         try:
-            spec = Spec(specs[0])
+            spec = Spec(specs[0], workdir)
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
-        # clean mock root cache
-        # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
-        logger.debug('cleaning mock root cache')
-        run_mock(['--clean', '--scrub=root-cache'])
+        chroot = Chroot(args.packages)
 
         # here we update our yum cache. It will stay the same for the remainder of the run
         logger.info('building reference rpm')
-        srpm.build_rpms(workdir, yum_update=True)
+        chroot.build_rpms(srpm, workdir, yum_update=True)
 
         if args.debug:
             debugdir=os.path.join(workdir, 'buildreq-check-debug')
             logger.info('building another reference rpm for debugging purposes')
-            srpm.build_rpms(debugdir)
+            chroot.build_rpms(srpm, debugdir)
             if not rpm_cmp_dir(workdir, debugdir):
                 raise Exception('built two different reference rpms. This should never happen!')
 
-        unneeded = find_unneeded_buildreqs(workdir, spec)
+        unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
 
         for s in unneeded:
             print(srpm.name + ':', sep_print(s, ', '))
