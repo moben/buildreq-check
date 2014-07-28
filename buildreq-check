@@ -642,7 +642,7 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
     return frozenset(f for f in unneeded if not any(f < g for g in unneeded))
 
 
-def parse_args():
+def parse_args(args):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
     parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
@@ -656,11 +656,11 @@ def parse_args():
     parser.add_argument('--install', '-i',
                         help='additional packages to install in the testing chroot',
                         dest='packages', nargs='+')
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
-def main():
-    args = parse_args()
+def main(mainargs):
+    args = parse_args(mainargs)
 
     logging.basicConfig(format='%(levelname)s: %(message)s', level=getattr(logging, args.loglvl.upper()))
     srpm = Srpm(args.srpm)
@@ -704,7 +704,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        main(sys.argv)
     except Exception as e:
         logger.error(str(e))
         sys.exit(1)
