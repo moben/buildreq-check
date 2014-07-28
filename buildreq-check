@@ -319,7 +319,6 @@ class Rpm(object):
             'RPMTAG_FILELANGS',
             'RPMTAG_FILELINKTOS',
             'RPMTAG_FILEMODES',
-            'RPMTAG_FILENAMES',
             'RPMTAG_FILENLINKS',
             'RPMTAG_FILEPROVIDE',
             'RPMTAG_FILERDEVS',
@@ -348,20 +347,20 @@ class Rpm(object):
                 differing_tags.add(tag)
                 ret = False
 
-        compare_content = set()
-
         filetuples = map(lambda hdr: zip_longest(*(hdr[getattr(rpm, tag)] for tag in file_tags)), (self.header, other.header))
-        filteredfiles = map(lambda l: filter(lambda t: not any(regex.search(t[0]) for regex in ignored_files), l), filetuples)
-        sortedfiles = map(lambda l: sorted(l, key=operator.itemgetter(0)), filteredfiles)
+        self_dict, other_dict = map(lambda l: { f[0]: f[1:] for f in l if not any(regex.search(f[0]) for regex in ignored_files) }, filetuples)
 
-        for f1, f2 in zip(*sortedfiles):
-            if f1 != f2:
-                compare_content.add(f1[0])
+        differing_files = set(self_dict.keys()) ^ set(other_dict.keys())
 
-        if compare_content:
-            if not self.cmp_contents(other, compare_content):
-                ret = False
-#               differing_files.add(fn)
+        if differing_files:
+            ret = False
+        else:
+            compare_content = set(f for f in self_dict if self_dict[f] != other_dict[f])
+
+            if compare_content:
+                if not self.cmp_contents(other, compare_content):
+                    ret = False
+#                   differing_files.add(fn)
 
         if not ret:
             logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
