@@ -70,7 +70,7 @@ def joinit(iterable, delimiter):
 
 
 def concat(lst):
-    return reduce(lambda a, b: a + b, lst)
+    return reduce(lambda a, b: a + b, lst, '')
 
 
 def sep_print(lst, sep):
