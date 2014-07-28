@@ -340,9 +340,10 @@ class Rpm(object):
             if f1 != f2:
                 compare_content.add(f1[0])
 
-        if not self.cmp_contents(other, compare_content):
-            ret = False
-#           differing_files.add(fn)
+        if compare_content:
+            if not self.cmp_contents(other, compare_content):
+                ret = False
+#               differing_files.add(fn)
 
         if not ret:
             logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
