@@ -119,6 +119,9 @@ class Rpm(object):
                 if missing:
                     raise UnpackError('failed to extract rpm: requested file missing: %s' % sep_print(missing, ', '))
 
+    def __ne__(self, other):
+        return not (self == other)
+
     def __eq__(self, other):
         rpm_tags = frozenset((
             'RPMTAG_ARCH',
@@ -409,6 +412,9 @@ class Content(object):
         else:
             logger.warning('Unknown filetype %s for file %s, will be treated as different from every file', self.filetype, self.name)
             self.filetype = self.cmp = None
+
+    def __ne__(self, other):
+        return not (self == other)
 
     def __eq__(self, other):
         if not (self.filetype and other.filetype) \
