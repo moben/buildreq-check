@@ -47,6 +47,7 @@ try:
 except ImportError:
     from itertools import izip_longest as zip_longest
 import logging
+import itertools
 import operator
 import os
 import os.path
@@ -59,6 +60,21 @@ import tempfile
 
 #NOTE not sure if it is good practice to do this at global scope?
 logger = logging.getLogger('buildreq-check')
+
+def joinit(iterable, delimiter):
+    it = iter(iterable)
+    yield next(it)
+    for x in it:
+        yield delimiter
+        yield x
+
+
+def concat(lst):
+    return reduce(lambda a, b: a + b, lst)
+
+
+def sep_print(lst, sep):
+    return concat(joinit(lst, sep))
 
 
 class MockError(Exception):
@@ -564,9 +580,6 @@ class Chroot(object):
             return Srpm(srpm[0])
 
 
-def sep_print(lst, sep):
-    return sep.join(map(str,lst))
-
 
 def get_buildid(pkgset):
         m = hashlib.sha1()
@@ -574,10 +587,17 @@ def get_buildid(pkgset):
         return m.hexdigest()[:7]
 
 
-# order is important here. Smallest to biggest. thus, don't use a set.
-def list_powerset(lst):
-    return tuple(map(frozenset, reduce(lambda result, x: result + [subset + [x] for subset in result], lst, [[]])))
-
+def powerset(seq):
+    """
+    Returns all the subsets of this set. This is a generator.
+    """
+    if len(seq) <= 1:
+        yield seq
+        yield []
+    else:
+        for item in powerset(seq[1:]):
+            yield [seq[0]]+item
+            yield item
 
 
 def rpm_cmp_dir(olddir, newdir):
@@ -595,7 +615,7 @@ def rpm_cmp_dir(olddir, newdir):
 
 
 def find_unneeded_buildreqs(chroot, spec, workdir):
-    possibly_unneeded = list_powerset(spec.buildrequires)
+    possibly_unneeded = map(frozenset, powerset(list(spec.buildrequires)))
     breaking = set()
 
     for combination in filter(None, possibly_unneeded):
@@ -638,9 +658,9 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
         if not rpm_cmp_dir(workdir, resultdir):
             breaking.add(combination)
 
-    unneeded = frozenset(frozenset(possibly_unneeded) - breaking)
+    unneeded = filter(lambda x: not x in breaking, possibly_unneeded)
     # get biggest supersets
-    return frozenset(f for f in unneeded if not any(f < g for g in unneeded))
+    return (f for f in unneeded if not any(f < g for g in unneeded))
 
 
 def parse_args(args):
@@ -694,7 +714,8 @@ def main(mainargs):
         unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
 
         for s in unneeded:
-            print(srpm.name + ':', sep_print(s, ', '))
+            sys.stdout.write(srpm.name + ':')
+            _ = map(sys.stdout.write, joinit(s, ', '))
 
     finally:
         if args.clean:
