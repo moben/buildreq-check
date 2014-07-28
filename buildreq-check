@@ -47,7 +47,6 @@ try:
 except ImportError:
     from itertools import izip_longest as zip_longest
 import logging
-import itertools
 import operator
 import os
 import os.path
@@ -582,9 +581,9 @@ class Chroot(object):
 
 
 def get_buildid(pkgset):
-        m = hashlib.sha1()
-        m.update(repr(pkgset))
-        return m.hexdigest()[:7]
+    m = hashlib.sha1()
+    m.update(repr(pkgset))
+    return m.hexdigest()[:7]
 
 
 def powerset(seq):
@@ -607,7 +606,7 @@ def rpm_cmp_dir(olddir, newdir):
             continue
 
         newrpm = Rpm(os.path.join(newdir, os.path.basename(rpm.name)))
-        if not rpm == newrpm:
+        if rpm != newrpm:
             logger.info('rpms %s and %s differ', rpm.name, newrpm.name)
             return False
 
@@ -705,7 +704,7 @@ def main(mainargs):
         chroot.build_rpms(srpm, workdir, yum_update=True)
 
         if args.debug:
-            debugdir=os.path.join(workdir, 'buildreq-check-debug')
+            debugdir = os.path.join(workdir, 'buildreq-check-debug')
             logger.info('building another reference rpm for debugging purposes')
             chroot.build_rpms(srpm, debugdir)
             if not rpm_cmp_dir(workdir, debugdir):
