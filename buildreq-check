@@ -91,6 +91,7 @@ class Rpm(object):
         self.name = name
 
         ts = rpm.ts()
+        ts._vsflags += rpm._RPMVSF_NOSIGNATURES
         fd = os.open(self.name, os.O_RDONLY)
         self.header = ts.hdrFromFdno(fd)
         os.close(fd)
