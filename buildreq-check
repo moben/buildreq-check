@@ -353,15 +353,13 @@ class Rpm(object):
 
         differing_files = set(self_dict.keys()) ^ set(other_dict.keys())
 
+        compare_content = set(f for f in self_dict if not f in differing_files and self_dict[f] != other_dict[f])
+
+        if compare_content:
+            differing_files.update(self.cmp_contents(other, compare_content))
+
         if differing_files:
             ret = False
-        else:
-            compare_content = set(f for f in self_dict if self_dict[f] != other_dict[f])
-
-            if compare_content:
-                if not self.cmp_contents(other, compare_content):
-                    ret = False
-#                   differing_files.add(fn)
 
         if not ret:
             logger.info('differing rpm header tags: %s', sep_print(differing_tags, ', '))
@@ -371,16 +369,17 @@ class Rpm(object):
 
     # assumes file lists were already checked for equality
     def cmp_contents(self, other, filenames):
-        ret = True
+        differing = []
         self_tree, other_tree = self.name + '.contents', other.name + '.contents'
 
         self.extract(self_tree, filenames)
         other.extract(other_tree, filenames)
 
-        for file1, file2 in zip(*map(lambda t: map(lambda f: Content(os.path.join(t, f.lstrip('/'))), filenames) , (self_tree, other_tree))):
-            ret = ret and (file1 == file2)
+        for filename, file1, file2 in zip(filenames, *map(lambda t: map(lambda f: Content(os.path.join(t, f.lstrip('/'))), filenames) , (self_tree, other_tree))):
+            if file1 != file2:
+                differing += [ filename ]
 
-        return ret
+        return differing
 
 
 class Srpm(Rpm):
