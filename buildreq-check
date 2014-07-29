@@ -731,7 +731,7 @@ def main(mainargs):
 
 if __name__ == "__main__":
     try:
-        main(sys.argv)
+        main(sys.argv[1:])
     except Exception as e:
         logger.error(str(e))
         sys.exit(1)
