@@ -675,8 +675,8 @@ def parse_args(args):
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
     parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
                         dest='clean', action='store_false', default=True)
-    parser.add_argument('--debug', '-d', help='build an additional reference rpm to debug this script',
-                        dest='debug', action='store_true', default=False)
+    parser.add_argument('--reproduce-only', '-r', help="only test if the build is reproducible, don't drop any BuildRequires",
+                        dest='reproduce', action='store_true', default=False)
     parser.add_argument('--loglvl', '-l',
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
@@ -707,14 +707,15 @@ def main(mainargs):
             logger.info('building reference rpm')
             chroot.build_rpms(srpm, workdir, yum_update=True)
 
-            if args.debug:
-                debugdir = os.path.join(workdir, 'buildreq-check-debug')
-                logger.info('building another reference rpm for debugging purposes')
-                # TODO: remove the yum update once yum handles the cache vs. local repo issue
-                # (or mock uses dnf, which doesn't have the bug)
-                chroot.build_rpms(srpm, debugdir, yum_update=True)
-                if not rpm_cmp_dir(workdir, debugdir):
-                    raise Exception('built two different reference rpms. This should never happen!', srpm.name)
+            reprodir = os.path.join(workdir, 'buildreq-check-reproducible')
+            logger.info('building another reference rpm to check if the build is reproducible')
+            # TODO: remove the yum update once yum handles the cache vs. local repo issue
+            # (or mock uses dnf, which doesn't have the bug)
+            chroot.build_rpms(srpm, reprodir, yum_update=True)
+            if not rpm_cmp_dir(workdir, reprodir):
+                raise Exception('built two different reference rpms. This should never happen!', srpm.name)
+            if args.reproduce:
+                sys.exit()
 
             unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
 
