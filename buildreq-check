@@ -515,7 +515,9 @@ class Spec(object):
 
 
 class Chroot(object):
-    def __init__(self):
+    def __init__(self, postfix=None):
+        self.postfix = postfix
+
         # clean mock root cache
         # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
         logger.debug('cleaning mock root cache')
@@ -526,6 +528,8 @@ class Chroot(object):
 
         if not yum_update:
             mock_args += ['--offline']
+        if self.postfix:
+            mock_args += ['--uniqueext', self.postfix]
 
         mock_args += args
 
@@ -689,7 +693,7 @@ def main(mainargs):
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
-        chroot = Chroot()
+        chroot = Chroot(os.path.basename(srpm.name))
 
         # here we update our yum cache. It will stay the same for the remainder of the run
         logger.info('building reference rpm')
