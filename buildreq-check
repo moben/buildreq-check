@@ -523,6 +523,13 @@ class Chroot(object):
         logger.debug('cleaning mock root cache')
         self.run_mock(['--clean', '--scrub=root-cache'])
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.run_mock(['--clean'])
+        self.run_mock(['--orphanskill'])
+
     def run_mock(self, args, yum_update=False):
         mock_args = ['mock']
 
@@ -693,20 +700,19 @@ def main(mainargs):
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
-        chroot = Chroot(os.path.basename(srpm.name))
+        with Chroot(os.path.basename(srpm.name)) as chroot:
+            # here we update our yum cache. It will stay the same for the remainder of the run
+            logger.info('building reference rpm')
+            chroot.build_rpms(srpm, workdir, yum_update=True)
 
-        # here we update our yum cache. It will stay the same for the remainder of the run
-        logger.info('building reference rpm')
-        chroot.build_rpms(srpm, workdir, yum_update=True)
+            if args.debug:
+                debugdir = os.path.join(workdir, 'buildreq-check-debug')
+                logger.info('building another reference rpm for debugging purposes')
+                chroot.build_rpms(srpm, debugdir)
+                if not rpm_cmp_dir(workdir, debugdir):
+                    raise Exception('built two different reference rpms. This should never happen!')
 
-        if args.debug:
-            debugdir = os.path.join(workdir, 'buildreq-check-debug')
-            logger.info('building another reference rpm for debugging purposes')
-            chroot.build_rpms(srpm, debugdir)
-            if not rpm_cmp_dir(workdir, debugdir):
-                raise Exception('built two different reference rpms. This should never happen!')
-
-        unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
+            unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
 
         for s in unneeded:
             sys.stdout.write(srpm.name + ':')
