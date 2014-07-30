@@ -515,9 +515,7 @@ class Spec(object):
 
 
 class Chroot(object):
-    def __init__(self, packages=None):
-        self.packages = packages
-
+    def __init__(self):
         # clean mock root cache
         # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
         logger.debug('cleaning mock root cache')
@@ -553,30 +551,22 @@ class Chroot(object):
         if not srpm.is_source:
             raise TypeError('Not a source rpm: %s', srpm.name)
 
-        if clean:
-            self.run_mock(['--init'], yum_update)
-
-        if self.packages:
-            self.run_mock(['--install'] + self.packages, yum_update)
-
-        args = ['--no-clean',
-                '--rebuild', srpm.name,
+        args = ['--rebuild', srpm.name,
                 '--resultdir', resultdir]
+
+        if not clean:
+            args += ['--no-clean']
 
         self.run_mock(args, yum_update)
 
     def build_srpm(self, spec, resultdir, yum_update=False, clean=True):
-        if clean:
-            self.run_mock(['--init'], yum_update)
-
-        if self.packages:
-            self.run_mock(['--install'] + self.packages, yum_update)
-
-        args = ['--no-clean',
-                '--buildsrpm',
+        args = ['--buildsrpm',
                 '--spec', spec.name,
                 '--sources', spec.sourcedir,
                 '--resultdir', resultdir]
+
+        if not clean:
+            args += ['--no-clean']
 
         if self.run_mock(args, yum_update):
             # there should only be one
@@ -678,9 +668,6 @@ def parse_args(args):
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
                         default='info', metavar='lvl')
-    parser.add_argument('--install', '-i',
-                        help='additional packages to install in the testing chroot',
-                        dest='packages', nargs='+')
     return parser.parse_args(args)
 
 
@@ -702,7 +689,7 @@ def main(mainargs):
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
-        chroot = Chroot(args.packages)
+        chroot = Chroot()
 
         # here we update our yum cache. It will stay the same for the remainder of the run
         logger.info('building reference rpm')
