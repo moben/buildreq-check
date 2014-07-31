@@ -714,7 +714,7 @@ def main(mainargs):
                 logger.info('building another reference rpm for debugging purposes')
                 chroot.build_rpms(srpm, debugdir)
                 if not rpm_cmp_dir(workdir, debugdir):
-                    raise Exception('built two different reference rpms. This should never happen!')
+                    raise Exception('built two different reference rpms. This should never happen!', srpm.name)
 
             unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
 
@@ -733,7 +733,7 @@ if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except Exception as e:
-        logger.error(str(e))
+        logger.error(sep_print(map(str, e.args), ', '))
         sys.exit(1)
 
 
