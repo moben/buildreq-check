@@ -375,7 +375,7 @@ class Rpm(object):
         self.extract(self_tree, filenames)
         other.extract(other_tree, filenames)
 
-        for filename, file1, file2 in zip(filenames, *map(lambda t: map(lambda f: Content(os.path.join(t, f.lstrip('/'))), filenames) , (self_tree, other_tree))):
+        for filename, file1, file2 in zip(filenames, *map(lambda t: map(lambda f: Content(t, f), filenames) , (self_tree, other_tree))):
             if file1 != file2:
                 differing += [ filename ]
 
@@ -390,27 +390,29 @@ class Content(object):
     ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
     ms.load()
 
-    def __init__(self, name):
-        self.name = name
-        self.filetype = self.ms.file(name)
+    def __init__(self, prefix, path):
+        self.prefix = prefix
+        self.path = path
+        self.name = os.path.join(self.prefix, self.path.lstrip('/'))
+        self.filetype = self.ms.file(self.name)
 
-        c = (
-            ('ELF',                     self.__cmp_elf),
-            ('G-IR binary database,',   self.__cmp_typelib),
-            ('HTML document',           self.__cmp_html),
-            ('python .* byte-compiled', self.__cmp_python),
-            ('Zip archive data',        self.__cmp_zip),
-            ('gzip compressed data',    self.__cmp_gzip),
-        )
-        comparators = frozenset(map(lambda (regex, func): (re.compile(regex), func), c))
+        comparators = map(lambda (regex, func, quirkname): (re.compile(regex), func, quirkname), (
+            ('ELF',                     self.__cmp_elf,     'elf'),
+            ('G-IR binary database,',   self.__cmp_typelib, 'typelib'),
+            ('HTML document',           self.__cmp_html,    'htmldoc'),
+            ('python .* byte-compiled', self.__cmp_python,  'python'),
+            ('Zip archive data',        self.__cmp_zip,     'zip/jar'),
+            ('gzip compressed data',    self.__cmp_gzip,    'gzip'),
+        ))
 
-        for regex, func in comparators:
+        for regex, func, quirkname in comparators:
             if regex.search(self.filetype):
                 self.cmp = func
+                self.quirk = quirkname
                 break
         else:
-            logger.warning('Unknown filetype %s for file %s, will be treated as different from every file', self.filetype, self.name)
-            self.filetype = self.cmp = None
+            logger.warning('Unknown filetype "%s" for file %s, will be treated as different from every file', self.filetype, self.name)
+            self.filetype = self.cmp = self.quirk = None
 
     def __ne__(self, other):
         return not (self == other)
@@ -418,8 +420,10 @@ class Content(object):
     def __eq__(self, other):
         if not (self.filetype and other.filetype) \
                 or self.filetype != other.filetype:
+            logger.warning('filetype mismatch ("%s" vs "%s") for %s', self.filetype, other.filetype, self.path)
             return False
 
+        logger.info('Using "%s" quirk for file %s', self.quirk, self.path)
         return self.cmp(other)
 
     def __cmp_python(self, other):
