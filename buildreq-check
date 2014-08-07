@@ -612,6 +612,7 @@ def powerset(seq):
 
 
 def rpm_cmp_dir(olddir, newdir):
+    ret = True
     rpms = (Rpm(r) for r in glob.glob(olddir + '/*.rpm'))
     for rpm in rpms:
         if rpm.name.endswith('.src.rpm'):
@@ -620,9 +621,9 @@ def rpm_cmp_dir(olddir, newdir):
         newrpm = Rpm(os.path.join(newdir, os.path.basename(rpm.name)))
         if rpm != newrpm:
             logger.info('rpms %s and %s differ', rpm.name, newrpm.name)
-            return False
+            ret = False
 
-    return True
+    return ret
 
 
 def find_unneeded_buildreqs(chroot, spec, workdir):
