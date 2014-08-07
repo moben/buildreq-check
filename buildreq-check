@@ -333,6 +333,7 @@ class Rpm(object):
 
         ignored_files = frozenset(map(re.compile, (
             '^/usr/lib/debug/.build-id',
+            '/usr/src/debug/gcc-.*/obj-x86_64-redhat-linux/gcc/cc1(|obj|plus|objplus)-checksum.c',
             )))
 
         ret = True
