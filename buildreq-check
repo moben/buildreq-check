@@ -500,6 +500,7 @@ class Spec(object):
     def __init__(self, name, sourcedir):
         self.name = name
         self.sourcedir = sourcedir
+        rpm.addMacro('_sourcedir', self.sourcedir)
         spkg = rpm.spec(self.name)
         self.buildrequires = frozenset(spkg.sourceHeader[rpm.RPMTAG_REQUIRENEVRS])
 
