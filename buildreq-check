@@ -524,11 +524,6 @@ class Chroot(object):
     def __init__(self, postfix=None):
         self.postfix = postfix
 
-        # clean mock root cache
-        # the next step generates a fresh root cache, which speeds things up immensly as we don't have to yum-update every single chroot
-        logger.debug('cleaning mock root cache')
-        self.run_mock(['--clean', '--scrub=root-cache'])
-
     def __enter__(self):
         return self
 
