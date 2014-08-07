@@ -710,7 +710,9 @@ def main(mainargs):
             if args.debug:
                 debugdir = os.path.join(workdir, 'buildreq-check-debug')
                 logger.info('building another reference rpm for debugging purposes')
-                chroot.build_rpms(srpm, debugdir)
+                # TODO: remove the yum update once yum handles the cache vs. local repo issue
+                # (or mock uses dnf, which doesn't have the bug)
+                chroot.build_rpms(srpm, debugdir, yum_update=True)
                 if not rpm_cmp_dir(workdir, debugdir):
                     raise Exception('built two different reference rpms. This should never happen!', srpm.name)
 
