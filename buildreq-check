@@ -419,8 +419,10 @@ class Content(object):
         return not (self == other)
 
     def __eq__(self, other):
-        if not (self.filetype and other.filetype) \
-                or self.filetype != other.filetype:
+        if not (self.filetype and other.filetype):
+            logger.warning('unhandled filetype ("%s" or "%s") for %s', self.filetype, other.filetype, self.path)
+            return False
+        if self.filetype != other.filetype:
             logger.warning('filetype mismatch ("%s" vs "%s") for %s', self.filetype, other.filetype, self.path)
             return False
 
