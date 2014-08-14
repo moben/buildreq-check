@@ -534,7 +534,9 @@ class Chroot(object):
         self.run_mock(['--clean'])
         self.run_mock(['--orphanskill'])
 
-    def run_mock(self, args, yum_update=False):
+    # TODO: set yum update to False once yum handles the cache vs. local repo issue
+    # (or mock uses dnf, which doesn't have the bug)
+    def run_mock(self, args, yum_update=True):
         mock_args = ['mock']
 
         if not yum_update:
@@ -709,9 +711,7 @@ def main(mainargs):
 
             reprodir = os.path.join(workdir, 'buildreq-check-reproducible')
             logger.info('building another reference rpm to check if the build is reproducible')
-            # TODO: remove the yum update once yum handles the cache vs. local repo issue
-            # (or mock uses dnf, which doesn't have the bug)
-            chroot.build_rpms(srpm, reprodir, yum_update=True)
+            chroot.build_rpms(srpm, reprodir)
             if not rpm_cmp_dir(workdir, reprodir):
                 raise Exception('built two different reference rpms. This should never happen!', srpm.name)
             if args.reproduce:
