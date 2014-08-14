@@ -562,7 +562,7 @@ class Chroot(object):
         except subprocess.CalledProcessError:
             pass
 
-        raise MockError(mock_args)
+        raise MockError(' '.join(['Build failed:'] + mock_args))
 
     def build_rpms(self, srpm, resultdir, yum_update=False, clean=True):
         if not srpm.is_source:
