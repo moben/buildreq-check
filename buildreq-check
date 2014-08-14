@@ -135,7 +135,6 @@ class Rpm(object):
             'RPMTAG_CHANGELOGTEXT',
             'RPMTAG_CHANGELOGTIME',
             'RPMTAG_CLASSDICT',
-            'RPMTAG_COLLECTIONS',
             'RPMTAG_CONFLICTFLAGS',
             'RPMTAG_CONFLICTNAME',
             'RPMTAG_CONFLICTNEVRS',
