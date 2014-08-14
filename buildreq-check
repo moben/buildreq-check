@@ -523,8 +523,9 @@ class Spec(object):
 
 
 class Chroot(object):
-    def __init__(self, postfix=None):
+    def __init__(self, root=None, postfix=None):
         self.postfix = postfix
+        self.root = root
 
     def __enter__(self):
         return self
@@ -538,6 +539,8 @@ class Chroot(object):
 
         if not yum_update:
             mock_args += ['--offline']
+        if self.root:
+            mock_args += ['--root', self.root]
         if self.postfix:
             mock_args += ['--uniqueext', self.postfix]
 
@@ -675,9 +678,10 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
 def parse_args(args):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('srpm', help='the srpm to scan for possibly unneeded BuildRequires')
+    parser.add_argument('--root', '-r', help='use the specified chroot configuration as defined in /etc/mock/<chroot>.cfg', dest='root', metavar='chroot')
     parser.add_argument('--no-clean', '-c', help="don't remove temporary directories",
                         dest='clean', action='store_false', default=True)
-    parser.add_argument('--reproduce-only', '-r', help="only test if the build is reproducible, don't drop any BuildRequires",
+    parser.add_argument('--reproduce-only', '-d', help="only test if the build is reproducible, don't drop any BuildRequires",
                         dest='reproduce', action='store_true', default=False)
     parser.add_argument('--loglvl', '-l',
                         help='set log verbosity',
@@ -704,7 +708,7 @@ def main(mainargs):
         except IndexError:
             raise Exception('Can\'t find spec file. Is this a srpm?')
 
-        with Chroot(os.path.basename(srpm.name)) as chroot:
+        with Chroot(root=args.root, postfix=os.path.basename(srpm.name)) as chroot:
             # here we update our yum cache. It will stay the same for the remainder of the run
             logger.info('building reference rpm')
             chroot.build_rpms(srpm, workdir, yum_update=True)
