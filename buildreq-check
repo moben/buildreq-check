@@ -523,6 +523,10 @@ class Spec(object):
 
 
 class Chroot(object):
+    # TODO: set yum update to False once yum handles the cache vs. local repo issue
+    # (or mock uses dnf, which doesn't have the bug)
+    yum_update_default = True
+
     def __init__(self, root=None, postfix=None):
         self.postfix = postfix
         self.root = root
@@ -534,9 +538,7 @@ class Chroot(object):
         self.run_mock(['--clean'])
         self.run_mock(['--orphanskill'])
 
-    # TODO: set yum update to False once yum handles the cache vs. local repo issue
-    # (or mock uses dnf, which doesn't have the bug)
-    def run_mock(self, args, yum_update=True):
+    def run_mock(self, args, yum_update=yum_update_default):
         mock_args = ['mock']
 
         if not yum_update:
@@ -566,7 +568,7 @@ class Chroot(object):
 
         raise MockError(' '.join(['Build failed:'] + mock_args))
 
-    def build_rpms(self, srpm, resultdir, yum_update=False, clean=True):
+    def build_rpms(self, srpm, resultdir, yum_update=yum_update_default, clean=True):
         if not srpm.is_source:
             raise TypeError('Not a source rpm: %s', srpm.name)
 
@@ -578,7 +580,7 @@ class Chroot(object):
 
         self.run_mock(args, yum_update)
 
-    def build_srpm(self, spec, resultdir, yum_update=False, clean=True):
+    def build_srpm(self, spec, resultdir, yum_update=yum_update_default, clean=True):
         args = ['--buildsrpm',
                 '--spec', spec.name,
                 '--sources', spec.sourcedir,
