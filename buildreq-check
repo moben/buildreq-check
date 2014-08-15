@@ -625,10 +625,9 @@ def rpm_cmp_dir(olddir, newdir):
 
 
 def find_unneeded_buildreqs(chroot, spec, workdir):
-    possibly_unneeded = powerset(spec.buildrequires)
     breaking = set()
 
-    for combination in possibly_unneeded:
+    for combination in powerset(spec.buildrequires):
         if any(b < combination for b in breaking):
             # assume that leaving out more deps won't fix an already failing build.
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
@@ -668,7 +667,7 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
         if not rpm_cmp_dir(workdir, resultdir):
             breaking.add(combination)
 
-    unneeded = filter(lambda x: not x in breaking, possibly_unneeded)
+    unneeded = filter(lambda x: not x in breaking, powerset(spec.buildrequires))
     # get biggest supersets
     return (f for f in unneeded if not any(f < g for g in unneeded))
 
