@@ -400,7 +400,7 @@ class Content(object):
         comparators = map(lambda (regex, func, quirkname): (re.compile(regex), func, quirkname), (
             ('ELF',                     self.__cmp_elf,     'elf'),
             ('G-IR binary database,',   self.__cmp_typelib, 'typelib'),
-            ('HTML document',           self.__cmp_html,    'htmldoc'),
+            ('HTML document',           self.__cmp_html,    'javadoc'),
             ('python .* byte-compiled', self.__cmp_python,  'python'),
             ('Zip archive data',        self.__cmp_zip,     'zip/jar'),
             ('gzip compressed data',    self.__cmp_gzip,    'gzip'),
