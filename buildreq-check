@@ -667,7 +667,8 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
         if not rpm_cmp_dir(workdir, resultdir):
             breaking.add(combination)
 
-    unneeded = filter(lambda x: not x in breaking, powerset(spec.buildrequires))
+    # evaluate here to make the return below work
+    unneeded = frozenset(filter(lambda x: not x in breaking, powerset(spec.buildrequires)))
     # get biggest supersets
     return (f for f in unneeded if not any(f < g for g in unneeded))
 
