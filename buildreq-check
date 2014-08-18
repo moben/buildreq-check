@@ -723,7 +723,8 @@ def main(mainargs):
 
         for s in unneeded:
             sys.stdout.write(srpm.name + ':')
-            _ = map(sys.stdout.write, joinit(s, ', '))
+            for r in joinit(s, ', '):
+                sys.stdout.write(r)
 
     finally:
         if args.clean:
