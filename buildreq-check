@@ -725,6 +725,7 @@ def main(mainargs):
             sys.stdout.write(srpm.name + ':')
             for r in joinit(s, ', '):
                 sys.stdout.write(r)
+            sys.stdout.write('\n')
 
     finally:
         if args.clean:
