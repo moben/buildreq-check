@@ -625,14 +625,14 @@ def rpm_cmp_dir(olddir, newdir):
 
 
 def find_unneeded_buildreqs(chroot, spec, workdir):
-    breaking = set()
+    unneeded = set()
 
     for combination in powerset(spec.buildrequires):
-        if any(b < combination for b in breaking):
+        if any(combination < p for p in unneeded):
             # assume that leaving out more deps won't fix an already failing build.
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
             # TODO? make this configurable?
-            breaking.add(combination)
+            unneeded.add(combination)
             continue
 
         build_id = get_buildid(combination)
@@ -646,29 +646,25 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
         logger.info('trying build without: %s', sep_print(combination, ', '))
         logger.debug('result directory: %s', resultdir)
 
+
         try:
+            what = 'srpm'
             srpm = chroot.build_srpm(testspec, resultdir)
-        except MockError:
-            breaking.add(combination)
-            continue
-        finally:
-            logger.debug('build without %s: srpm %s',
-                    sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
 
-        try:
+            what = 'rpm'
             chroot.build_rpms(srpm, resultdir)
+
+            passed=True
         except MockError:
-            breaking.add(combination)
+            passed=False
             continue
         finally:
-            logger.debug('build without %s: rpm %s',
-                    sep_print(combination, ', '), 'passed' if not combination in breaking else 'failed')
+            logger.debug('build without %s: %s %s',
+                    sep_print(combination, ', '), what, 'passed' if passed else 'failed')
 
-        if not rpm_cmp_dir(workdir, resultdir):
-            breaking.add(combination)
+        if rpm_cmp_dir(workdir, resultdir):
+            unneeded.add(combination)
 
-    # evaluate here to make the return below work
-    unneeded = frozenset(filter(lambda x: not x in breaking, powerset(spec.buildrequires)))
     # get biggest supersets
     return (f for f in unneeded if not any(f < g for g in unneeded))
 
