@@ -626,6 +626,7 @@ def rpm_cmp_dir(olddir, newdir):
 
 def find_unneeded_buildreqs(chroot, spec, workdir):
     unneeded = set()
+    breaking = set()
 
     for combination in powerset(spec.buildrequires):
         if any(combination < p for p in unneeded):
@@ -633,6 +634,8 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
             # TODO? make this configurable?
             unneeded.add(combination)
+            continue
+        if any(b < combination for b in breaking):
             continue
 
         build_id = get_buildid(combination)
@@ -657,6 +660,8 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
             passed=True
         except MockError:
             passed=False
+            if not any(b < combination for b in breaking):
+                breaking.add(combination)
             if combination < frozenset.union(*unneeded):
                 logger.warn('build without %s failed even though it should have passed', combination)
             continue
