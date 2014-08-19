@@ -657,6 +657,8 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
             passed=True
         except MockError:
             passed=False
+            if combination < frozenset.union(*unneeded):
+                logger.warn('build without %s failed even though it should have passed', combination)
             continue
         finally:
             logger.debug('build without %s: %s %s',
