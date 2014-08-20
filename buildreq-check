@@ -522,6 +522,37 @@ class Spec(object):
         return Spec(new_name, self.sourcedir)
 
 
+class DummyConflictSpec(Spec):
+    def __init__(self, name, conflicts):
+        self.conflicts = conflicts
+        f = open(name, 'w+')
+
+        for c in self.conflicts:
+            f.write('Conflicts: ' + c + '\n')
+        f.write('''
+Name:      dummy
+Version:   0
+Release:   1%{?dist}
+Summary:   dummy
+License:   BSD
+BuildArch: noarch
+
+%description
+dummy
+
+%files
+''')
+        f.close()
+        super(DummyConflictSpec, self).__init__(name, '/')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self):
+        self.tmpspec.close()
+
+
+
 class Chroot(object):
     # TODO: set yum update to False once yum handles the cache vs. local repo issue
     # (or mock uses dnf, which doesn't have the bug)
@@ -567,6 +598,30 @@ class Chroot(object):
             pass
 
         raise MockError(' '.join(['Build failed:'] + mock_args))
+
+    def init(self):
+        self.run_mock(['--init'])
+
+    def install(self, rpm, yum_update=yum_update_default):
+        args = ['--install', rpm.name]
+
+        self.run_mock(args, yum_update)
+
+
+    def install_deps(self, rpm, resultdir, yum_update=yum_update_default):
+        args = ['--installdeps', rpm.name,
+                '--resultdir', resultdir]
+
+        self.run_mock(args, yum_update)
+
+    def mask_reqs(self, combination):
+        tmpdir = tempfile.mkdtemp()
+        dummyspec = DummyConflictSpec(os.path.join(tmpdir, 'dummy.spec'), combination)
+        rpmbuild_cmd = ['rpmbuild', '-bb', '--define', '_rpmdir ' + tmpdir, dummyspec.name]
+        subprocess.check_call(rpmbuild_cmd, stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
+        rpm = Rpm(glob.glob(tmpdir + '/noarch/*.noarch.rpm')[0])
+        self.install(rpm)
+        shutil.rmtree(tmpdir)
 
     def build_rpms(self, srpm, resultdir, yum_update=yum_update_default, clean=True):
         if not srpm.is_source:
@@ -651,15 +706,26 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
 
 
         try:
+            passed=False
+
             what = 'srpm'
             srpm = chroot.build_srpm(testspec, resultdir)
 
+            what = 'installdeps'
+            chroot.init()
+            chroot.install_deps(srpm, resultdir)
+
+            try:
+                chroot.mask_reqs(combination)
+            except MockError:
+                logger.info('cannot build without %s as it is pulled in indirectly. Skipping it', sep_print(combination, ', '))
+                continue
+
             what = 'rpm'
-            chroot.build_rpms(srpm, resultdir)
+            chroot.build_rpms(srpm, resultdir, clean=False)
 
             passed=True
         except MockError:
-            passed=False
             if not any(b < combination for b in breaking):
                 breaking.add(combination)
             if combination < frozenset.union(*unneeded):
