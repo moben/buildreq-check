@@ -685,12 +685,12 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
 
     for combination in powerset(spec.buildrequires):
         if any(combination < p for p in unneeded):
-            # assume that leaving out more deps won't fix an already failing build.
-            # might not be true in general, but is a pretty safe bet for unneeded deps, I think
-            # TODO? make this configurable?
             unneeded.add(combination)
             continue
         if any(b < combination for b in breaking):
+            # assume that leaving out more deps won't fix an already failing build.
+            # might not be true in general, but is a pretty safe bet for unneeded deps, I think
+            # TODO? make this configurable?
             continue
 
         build_id = get_buildid(combination)
