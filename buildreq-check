@@ -386,6 +386,11 @@ class Rpm(object):
 class Srpm(Rpm):
     is_source = True
 
+    def __init__(self, name):
+        super(Srpm, self).__init__(name)
+
+        self.buildrequires = frozenset(filter(lambda s: not s.startswith('rpmlib('), self.header[rpm.RPMTAG_REQUIRENEVRS]))
+
 
 class Content(object):
     ms = magic.open(magic.MAGIC_NO_CHECK_ELF)
@@ -498,52 +503,29 @@ class HTMLWithoutComments(HTMLParser.HTMLParser):
     unknown_decl = handle
 
 
-class Spec(object):
-    def __init__(self, name, sourcedir):
+class DummySpec(object):
+    def __init__(self, path, name, **kwargs):
+        self.path = path
         self.name = name
-        self.sourcedir = sourcedir
-        rpm.addMacro('_sourcedir', self.sourcedir)
-        spkg = rpm.spec(self.name)
-        self.buildrequires = frozenset(spkg.sourceHeader[rpm.RPMTAG_REQUIRENEVRS])
+        f = open(self.name, 'w+')
 
-    def rewrite(self, new_name, excludes):
-        with open(self.name) as oldfile, open(new_name, 'w') as newfile:
-            for req in self.buildrequires - excludes:
-                newfile.write('BuildRequires: %s\n' % req)
-
-            pattern = re.compile('^(|%\S+)BuildRequires\s*:.*$', re.IGNORECASE)
-            for line in oldfile.read().splitlines():
-                if pattern.match(line) == None:
-                    newfile.write(line)
-                    newfile.write('\n')
-
-            newfile.flush()
-
-        return Spec(new_name, self.sourcedir)
-
-
-class DummyConflictSpec(Spec):
-    def __init__(self, name, conflicts):
-        self.conflicts = conflicts
-        f = open(name, 'w+')
-
-        for c in self.conflicts:
-            f.write('Conflicts: ' + c + '\n')
+        for t in kwargs:
+            for c in kwargs[t]:
+                f.write(t + ': ' + c + '\n')
         f.write('''
-Name:      dummy
+Name:      {0}
 Version:   0
-Release:   1%{?dist}
-Summary:   dummy
+Release:   0
+Summary:   {0}
 License:   BSD
 BuildArch: noarch
 
 %description
-dummy
+{0}
 
 %files
-''')
+'''.format(self.name))
         f.close()
-        super(DummyConflictSpec, self).__init__(name, '/')
 
     def __enter__(self):
         return self
@@ -602,25 +584,19 @@ class Chroot(object):
     def init(self):
         self.run_mock(['--init'])
 
-    def install(self, rpm, yum_update=yum_update_default):
-        args = ['--install', rpm.name]
+    def install(self, *names):
+        args = ['--install'] + list(names)
 
-        self.run_mock(args, yum_update)
+        self.run_mock(args)
 
-
-    def install_deps(self, rpm, resultdir, yum_update=yum_update_default):
-        args = ['--installdeps', rpm.name,
-                '--resultdir', resultdir]
-
-        self.run_mock(args, yum_update)
-
-    def mask_reqs(self, combination):
+    def add_dummy(self, name, **kwargs):
         tmpdir = tempfile.mkdtemp()
-        dummyspec = DummyConflictSpec(os.path.join(tmpdir, 'dummy.spec'), combination)
+        dummypath = os.path.join(tmpdir, name + '.spec')
+        dummyspec = DummySpec(dummypath, name, **kwargs)
         rpmbuild_cmd = ['rpmbuild', '-bb', '--define', '_rpmdir ' + tmpdir, dummyspec.name]
         subprocess.check_call(rpmbuild_cmd, stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
-        rpm = Rpm(glob.glob(tmpdir + '/noarch/*.noarch.rpm')[0])
-        self.install(rpm)
+        rpmname = glob.glob(tmpdir + '/noarch/*.noarch.rpm')[0]
+        self.install(rpmname)
         shutil.rmtree(tmpdir)
 
     def build_rpms(self, srpm, resultdir, yum_update=yum_update_default, clean=True):
@@ -634,20 +610,6 @@ class Chroot(object):
             args += ['--no-clean']
 
         self.run_mock(args, yum_update)
-
-    def build_srpm(self, spec, resultdir, yum_update=yum_update_default, clean=True):
-        args = ['--buildsrpm',
-                '--spec', spec.name,
-                '--sources', spec.sourcedir,
-                '--resultdir', resultdir]
-
-        if not clean:
-            args += ['--no-clean']
-
-        if self.run_mock(args, yum_update):
-            # there should only be one
-            srpm = glob.glob(resultdir + '/*.src.rpm')
-            return Srpm(srpm[0])
 
 
 
@@ -679,11 +641,11 @@ def rpm_cmp_dir(olddir, newdir):
     return ret
 
 
-def find_unneeded_buildreqs(chroot, spec, workdir):
+def find_unneeded_buildreqs(chroot, srpm, workdir):
     unneeded = set()
     breaking = set()
 
-    for combination in powerset(spec.buildrequires):
+    for combination in powerset(srpm.buildrequires):
         if any(combination < p for p in unneeded):
             unneeded.add(combination)
             continue
@@ -694,32 +656,25 @@ def find_unneeded_buildreqs(chroot, spec, workdir):
             continue
 
         build_id = get_buildid(combination)
-        build_name = os.path.basename(spec.name)[:-5] + '-buildreq-check-' + build_id
+        build_name = os.path.basename(srpm.name)[:-len('.src.rpm')] + '-buildreq-check-' + build_id
 
         resultdir = os.path.join(workdir, build_name + '-results')
-
-        testspec_name = os.path.join(workdir, build_name + '.spec')
-        testspec = spec.rewrite(testspec_name, combination)
 
         logger.info('trying build without: %s', sep_print(combination, ', '))
         logger.debug('result directory: %s', resultdir)
 
-
         try:
             passed=False
 
-            what = 'srpm'
-            srpm = chroot.build_srpm(testspec, resultdir)
-
             what = 'installdeps'
             chroot.init()
-            chroot.install_deps(srpm, resultdir)
-
+            chroot.add_dummy('dummy-conflicts', Conflicts=combination)
             try:
-                chroot.mask_reqs(combination)
+                chroot.install(*(srpm.buildrequires - combination))
             except MockError:
-                logger.info('cannot build without %s as it is pulled in indirectly. Skipping it', sep_print(combination, ', '))
+                logger.info('cannot build without %s as some of them were pulled in indirectly. Skipping', sep_print(combination, ', '))
                 continue
+            chroot.add_dummy('dummy-provides', Obsoletes=['dummy-conflicts'], Provides=combination)
 
             what = 'rpm'
             chroot.build_rpms(srpm, resultdir, clean=False)
@@ -766,15 +721,6 @@ def main(mainargs):
     workdir = tempfile.mkdtemp(prefix='buildreq-check')
 
     try:
-        srpm.extract(workdir)
-        specs = glob.glob(workdir + '/*.spec')
-        # from mock/py/mockbuild/backend.py:
-        # if there's more than one then someone is an idiot
-        try:
-            spec = Spec(specs[0], workdir)
-        except IndexError:
-            raise Exception('Can\'t find spec file. Is this a srpm?')
-
         with Chroot(root=args.root, postfix=os.path.basename(srpm.name)) as chroot:
             # here we update our yum cache. It will stay the same for the remainder of the run
             logger.info('building reference rpm')
@@ -788,7 +734,7 @@ def main(mainargs):
             if args.reproduce:
                 sys.exit()
 
-            unneeded = find_unneeded_buildreqs(chroot, spec, workdir)
+            unneeded = find_unneeded_buildreqs(chroot, srpm, workdir)
 
         for s in unneeded:
             sys.stdout.write(srpm.name + ':')
