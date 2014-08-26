@@ -427,8 +427,8 @@ class Content(object):
         if not (self.filetype and other.filetype):
             logger.warning('unhandled filetype ("%s" or "%s") for %s', self.filetype, other.filetype, self.path)
             return False
-        if self.filetype != other.filetype:
-            logger.warning('filetype mismatch ("%s" vs "%s") for %s', self.filetype, other.filetype, self.path)
+        if self.quirk != other.quirk:
+            logger.warning('quirk mismatch ("%s" vs "%s") for %s', self.quirk, other.quirk, self.path)
             return False
 
         logger.info('Using "%s" quirk for file %s', self.quirk, self.path)
