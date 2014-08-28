@@ -504,10 +504,11 @@ class HTMLWithoutComments(HTMLParser.HTMLParser):
 
 
 class DummySpec(object):
-    def __init__(self, path, name, **kwargs):
-        self.path = path
+    def __init__(self, tmpdir, name, **kwargs):
         self.name = name
-        f = open(self.name, 'w+')
+        self.tmpdir = tmpdir
+        self.path = os.path.join(self.tmpdir, self.name + '.spec')
+        f = open(self.path, 'w+')
 
         for t in kwargs:
             for c in kwargs[t]:
@@ -533,6 +534,10 @@ BuildArch: noarch
     def __exit__(self):
         self.tmpspec.close()
 
+    def build(self):
+        rpmbuild_cmd = ['rpmbuild', '-bb', '--define', '_rpmdir ' + self.tmpdir, self.path]
+        subprocess.check_call(rpmbuild_cmd, stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
+        return glob.glob(self.tmpdir + '/noarch/*.noarch.rpm')[0]
 
 
 class Chroot(object):
@@ -591,11 +596,8 @@ class Chroot(object):
 
     def add_dummy(self, name, **kwargs):
         tmpdir = tempfile.mkdtemp()
-        dummypath = os.path.join(tmpdir, name + '.spec')
-        dummyspec = DummySpec(dummypath, name, **kwargs)
-        rpmbuild_cmd = ['rpmbuild', '-bb', '--define', '_rpmdir ' + tmpdir, dummyspec.name]
-        subprocess.check_call(rpmbuild_cmd, stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)
-        rpmname = glob.glob(tmpdir + '/noarch/*.noarch.rpm')[0]
+        dummyspec = DummySpec(tmpdir, name, **kwargs)
+        rpmname = dummyspec.build()
         self.install(rpmname)
         shutil.rmtree(tmpdir)
 
