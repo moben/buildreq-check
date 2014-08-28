@@ -7,7 +7,9 @@
 #   See the Simple Patch Policy at
 #       https://fedoraproject.org/wiki/Policy_for_simple_patches#Simple_Patch_Policy
 #
-# Copyright (C) 2014 Benedikt Morbach
+# Copyright (C) 2014 Red Hat, Inc
+#
+# Author: Benedikt Morbach <benedikt.morbach@googlemail.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
