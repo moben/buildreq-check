@@ -649,6 +649,7 @@ def find_unneeded_buildreqs(chroot, srpm, workdir):
 
     for combination in powerset(srpm.buildrequires):
         if any(combination < p for p in unneeded):
+            # shouldn't actually happen if iteration order is right (smallest to biggest subset)
             unneeded.add(combination)
             continue
         if any(b < combination for b in breaking):
