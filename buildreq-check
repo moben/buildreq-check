@@ -420,14 +420,14 @@ class Content(object):
                 break
         else:
             logger.warning('Unknown filetype "%s" for file %s, will be treated as different from every file', self.filetype, self.name)
-            self.filetype = self.cmp = self.quirk = None
+            self.cmp = self.quirk = None
 
     def __ne__(self, other):
         return not (self == other)
 
     def __eq__(self, other):
-        if not (self.filetype and other.filetype):
-            logger.warning('unhandled filetype ("%s" or "%s") for %s', self.filetype, other.filetype, self.path)
+        if not (self.quirk and other.quirk):
+            logger.warning('unhandled filetype (' + ' or '.join((self.filetype, other.filetype)) + ') for %s', self.path)
             return False
         if self.quirk != other.quirk:
             logger.warning('quirk mismatch ("%s" vs "%s") for %s', self.quirk, other.quirk, self.path)
@@ -681,7 +681,7 @@ def find_unneeded_buildreqs(chroot, srpm, workdir):
             try:
                 chroot.install(*(srpm.buildrequires - combination))
             except MockError:
-                logger.info('cannot build without %s as some of them were pulled in indirectly. Skipping', sep_print(combination, ', '))
+                logger.info('skipping build, some of these were pulled in indirectly: %s', sep_print(combination, ', '))
                 continue
             chroot.add_dummy('dummy-provides', Obsoletes=['dummy-conflicts'], Provides=combination)
 
