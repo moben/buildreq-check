@@ -657,6 +657,10 @@ def find_unneeded_buildreqs(chroot, srpm, workdir):
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
             # TODO? make this configurable?
             continue
+        if combination <= reduce(lambda x, y: x | y, unneeded, set()):
+            # lazy mode: assume that  {A} in unneeded && {B} in unneeded => {A,B} in unneeded
+            unneeded.add(combination)
+            continue
 
         build_id = get_buildid(combination)
         build_name = os.path.basename(srpm.name)[:-len('.src.rpm')] + '-buildreq-check-' + build_id
