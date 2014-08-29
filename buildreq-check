@@ -758,7 +758,8 @@ def main(mainargs):
             logger.info('building another reference rpm to check if the build is reproducible')
             chroot.build_rpms(srpm, reprodir)
             if not rpm_cmp_dir(workdir, reprodir):
-                raise Exception('built two different reference rpms. This should never happen!', srpm.name)
+                logger.error('built two different reference rpms. This should never happen! %s', srpm.name)
+                sys.exit(1)
             if args.reproduce:
                 sys.exit()
 
@@ -778,11 +779,8 @@ def main(mainargs):
 
 
 if __name__ == "__main__":
-    try:
-        main(sys.argv[1:])
-    except Exception as e:
-        logger.error(sep_print(map(str, e.args), ', '))
-        sys.exit(1)
+    main(sys.argv[1:])
+    sys.exit()
 
 
 # vim: sta:et:ai:si:ts=4:sw=4:sts=4
