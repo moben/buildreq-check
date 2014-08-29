@@ -701,6 +701,8 @@ def find_unneeded_buildreqs(chroot, srpm, workdir):
 
         if rpm_cmp_dir(workdir, resultdir):
             unneeded.add(combination)
+        else:
+            breaking.add(combination)
 
     # get biggest supersets
     return (f for f in unneeded if not any(f < g for g in unneeded))
