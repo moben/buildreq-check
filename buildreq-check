@@ -736,7 +736,7 @@ def parse_args(args):
     parser.add_argument('--loglvl', '-l',
                         help='set log verbosity',
                         choices=('debug', 'info', 'warning', 'error', 'critical'),
-                        default='info', metavar='lvl')
+                        default='warn', metavar='lvl')
     return parser.parse_args(args)
 
 
