@@ -44,7 +44,7 @@ except ImportError:
 import argparse
 import glob
 import hashlib
-from itertools import chain, combinations
+from itertools import chain, combinations, product
 try:
     from itertools import zip_longest
 except ImportError:
@@ -623,11 +623,12 @@ def get_buildid(pkgset):
     return m.hexdigest()[:7]
 
 
-def powerset(seq):
+def powerset(seq, reverse=False):
     """
     Returns all the subsets of this set, except for the empty set. This is a generator.
     """
-    return map(frozenset, chain.from_iterable(combinations(seq, r) for r in range(1, len(seq)+1)))
+    n = range(len(seq), 0, -1) if reverse else range(1, len(seq)+1)
+    return map(frozenset, chain.from_iterable(combinations(seq, r) for r in n))
 
 
 def rpm_cmp_dir(olddir, newdir):
@@ -645,16 +646,15 @@ def rpm_cmp_dir(olddir, newdir):
     return ret
 
 
-def find_unneeded_buildreqs(chroot, srpm, workdir):
+def try_builds(chroot, srpm, workdir, combinations):
     unneeded = set()
     breaking = set()
 
-    for combination in powerset(srpm.buildrequires):
-        if any(combination < p for p in unneeded):
-            # shouldn't actually happen if iteration order is right (smallest to biggest subset)
+    for combination in combinations:
+        if any(combination <= p for p in unneeded):
             unneeded.add(combination)
             continue
-        if any(b < combination for b in breaking):
+        if any(b <= combination for b in breaking):
             # assume that leaving out more deps won't fix an already failing build.
             # might not be true in general, but is a pretty safe bet for unneeded deps, I think
             # TODO? make this configurable?
@@ -704,8 +704,25 @@ def find_unneeded_buildreqs(chroot, srpm, workdir):
         else:
             breaking.add(combination)
 
-    # get biggest supersets
-    return (f for f in unneeded if not any(f < g for g in unneeded))
+    return map(lambda S: (f for f in S if not any(f < g for g in S)), (unneeded, breaking))
+
+
+def find_unneeded_buildreqs(chroot, srpm, workdir):
+    u, b = try_builds(chroot, srpm, workdir, map(lambda x: frozenset([x]), srpm.buildrequires))
+
+    unneeded = reduce(lambda x, y: x | y, u, set())
+    breaking = reduce(lambda x, y: x | y, b, set())
+    undecided = srpm.buildrequires - unneeded - breaking
+
+    # start from the biggest set and go downwards. Best case: Only one build
+    unneeded_sets, _ = try_builds(chroot, srpm, workdir, powerset(unneeded, reverse=True))
+
+    # this is a bit convoluted but tries hard not to evaluate the whole search space here
+    # (the powerset could use fatal amounts of memory)
+    u, _ = try_builds(chroot, srpm, workdir, map(lambda (x, y): y | x, product(powerset(undecided), unneeded_sets)))
+    unneeded = unneeded | reduce(lambda x, y: x | y, u, set())
+
+    return unneeded
 
 
 def parse_args(args):
@@ -747,9 +764,9 @@ def main(mainargs):
 
             unneeded = find_unneeded_buildreqs(chroot, srpm, workdir)
 
-        for s in unneeded:
+        if unneeded:
             sys.stdout.write(srpm.name + ':')
-            for r in joinit(s, ', '):
+            for r in joinit(unneeded, ', '):
                 sys.stdout.write(r)
             sys.stdout.write('\n')
 
